@@ -499,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }),
         ),
         const SizedBox(width: 10),
-        _AddButton(onPick: _newItem),
+        _AddButton(onPick: _newItem, fixedKind: _category.kind),
         const SizedBox(width: 14),
         _LockCountdown(state: state),
       ]),
@@ -977,12 +977,27 @@ class _StatCard extends StatelessWidget {
 }
 
 class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onPick});
+  const _AddButton({required this.onPick, this.fixedKind});
 
   final void Function(ItemKind) onPick;
 
+  /// 已經切到某個分類時就不用再問要新增哪一種，直接開那一種的表單。
+  /// 只有在「全部」才需要選單。
+  final ItemKind? fixedKind;
+
   @override
   Widget build(BuildContext context) {
+    final kind = fixedKind;
+    if (kind != null) {
+      return FilledButton.icon(
+        onPressed: () => onPick(kind),
+        icon: const Icon(Icons.add, size: 17),
+        label: const Text('新增'),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      );
+    }
     return MenuAnchor(
       builder: (context, controller, child) => FilledButton.icon(
         onPressed: () =>

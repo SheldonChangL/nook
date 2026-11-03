@@ -97,6 +97,27 @@ void main() {
     expect(find.text('新增主機 / VM'), findsOneWidget);
   }
 
+  testWidgets('在分類頁按新增，直接開該類型的表單，不再問要哪一種', (tester) async {
+    await bootUnlocked(tester);
+
+    // 預設在「全部」，這時按新增應該要跳出選單讓你挑類型。
+    await tester.tap(find.widgetWithText(FilledButton, '新增'));
+    await grind(tester);
+    expect(find.byType(MenuItemButton), findsWidgets);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await grind(tester);
+
+    // 切到「金鑰」之後，按新增就該直接開金鑰的表單。
+    await tester.tap(find.text('金鑰').first);
+    await grind(tester);
+    await tester.tap(find.widgetWithText(FilledButton, '新增'));
+    await grind(tester);
+
+    expect(find.text('新增金鑰'), findsOneWidget);
+    expect(find.byType(MenuItemButton), findsNothing,
+        reason: '已經在金鑰分類了，不該再問一次要新增哪一種');
+  });
+
   testWidgets('打字算活動，會把自動上鎖的倒數推回去', (tester) async {
     final state = await bootUnlocked(tester);
 

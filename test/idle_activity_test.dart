@@ -79,7 +79,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, masterPassword);
     await grind(tester);
     await tester.runAsync(() async {
-      await tester.tap(find.widgetWithText(FilledButton, '解鎖'));
+      await tester.tap(find.widgetWithText(FilledButton, '解除鎖定'));
       for (var i = 0; i < 600 && state.phase != VaultPhase.unlocked; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
@@ -153,7 +153,7 @@ void main() {
     expect(find.byType(Dialog), findsNothing,
         reason: '編輯器留在上鎖畫面上的話，已經展開的機密會繼續顯示在那裡');
     expect(find.text('halfway-typed'), findsNothing);
-    expect(find.text('解鎖保險庫'), findsOneWidget);
+    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
   });
 
   testWidgets('預設切換到其他 app 不會上鎖', (tester) async {
@@ -195,7 +195,7 @@ void main() {
     await grind(tester, rounds: 4);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await grind(tester, rounds: 4);
-    expect(find.text('解鎖保險庫'), findsOneWidget);
+    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
   });
 
   testWidgets('上鎖時也會把詳情面板收掉', (tester) async {
@@ -208,6 +208,6 @@ void main() {
 
     expect(state.phase, VaultPhase.locked);
     expect(find.text('示範金鑰'), findsNothing);
-    expect(find.text('解鎖保險庫'), findsOneWidget);
+    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
   });
 }

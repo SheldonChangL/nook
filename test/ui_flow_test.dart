@@ -113,13 +113,13 @@ void main() {
 
     // --- 建立保險庫 -------------------------------------------------
     expect(state.phase, VaultPhase.needsSetup);
-    expect(find.text('建立保險庫'), findsOneWidget);
+    expect(find.text('建立你的 SecureManage'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(0), masterPassword);
     await tester.enterText(find.byType(TextField).at(1), masterPassword);
     await tapAndWait(
       tester,
-      find.widgetWithText(FilledButton, '建立'),
+      find.widgetWithText(FilledButton, '建立保險庫'),
       () => state.phase == VaultPhase.unlocked,
     );
 
@@ -160,7 +160,7 @@ void main() {
     state.lock();
     await grind(tester);
     expect(state.phase, VaultPhase.locked);
-    expect(find.text('解鎖保險庫'), findsOneWidget);
+    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
     expect(find.text('testbox'), findsNothing,
         reason: '上鎖之後畫面上不該還看得到任何項目');
 
@@ -168,7 +168,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'definitely-wrong');
     await tapAndWait(
       tester,
-      find.widgetWithText(FilledButton, '解鎖'),
+      find.widgetWithText(FilledButton, '解除鎖定'),
       () => state.unlockError != null,
     );
     expect(state.phase, VaultPhase.locked);
@@ -178,7 +178,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, masterPassword);
     await tapAndWait(
       tester,
-      find.widgetWithText(FilledButton, '解鎖'),
+      find.widgetWithText(FilledButton, '解除鎖定'),
       () => state.phase == VaultPhase.unlocked,
     );
 
@@ -209,7 +209,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, masterPassword);
     await tapAndWait(
       tester,
-      find.widgetWithText(FilledButton, '解鎖'),
+      find.widgetWithText(FilledButton, '解除鎖定'),
       () => state.phase == VaultPhase.unlocked,
     );
 
@@ -258,7 +258,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, masterPassword);
     await tapAndWait(
       tester,
-      find.widgetWithText(FilledButton, '解鎖'),
+      find.widgetWithText(FilledButton, '解除鎖定'),
       () => state.phase == VaultPhase.unlocked,
     );
     expect(state.phase, VaultPhase.unlocked);

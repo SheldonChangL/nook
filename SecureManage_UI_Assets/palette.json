@@ -1,0 +1,12 @@
+{
+  "brand_blue_dark": "#0D5C96",
+  "brand_blue": "#1878BE",
+  "brand_blue_bright": "#2F8EDB",
+  "panel_blue_light": "#DDF1FF",
+  "panel_blue_mid": "#9ED1FA",
+  "surface": "#FCFCFB",
+  "surface_alt": "#F3F6FA",
+  "text_primary": "#17212B",
+  "text_secondary": "#66707A",
+  "border": "#D7DEE7"
+}

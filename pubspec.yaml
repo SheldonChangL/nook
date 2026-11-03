@@ -39,6 +39,7 @@ dependencies:
   path_provider: ^2.1.6
   flutter_secure_storage: ^11.2.0
   uuid: ^4.6.0
+  flutter_svg: ^2.3.2
 
 dev_dependencies:
   flutter_test:
@@ -61,6 +62,11 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - SecureManage_UI_Assets/hero/
+    - SecureManage_UI_Assets/icons/
+    - SecureManage_UI_Assets/backgrounds/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

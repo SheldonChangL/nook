@@ -52,5 +52,12 @@ if ! codesign -d --entitlements - "$TARGET" 2>/dev/null | tr -d '\0' | grep -q "
   exit 1
 fi
 
+# build/ 裡留著一個 .app，Spotlight 會把它和 /Applications 那個一起索引，
+# Launchpad 就會出現兩個一模一樣的 SecureManage。
+# （試過在 build/ 放 .metadata_never_index，沒有用 —— 那個標記只在磁碟區根目錄生效。）
+# 產物本來就是可以重新編出來的，裝完就刪掉最乾脆；中間檔留著，下次重建一樣快。
+echo "==> 清掉 build/ 裡的產物，免得 Launchpad 出現重複項目"
+rm -rf "$BUILT"
+
 echo "==> 好了，開起來"
 open "$TARGET"

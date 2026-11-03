@@ -264,6 +264,25 @@ flutter test tool/render_screens.dart --update-goldens
 
 **所有測試一律使用程式裡捏造的假資料**（`198.51.100.x`、`example.test`、`fake-*`），不碰任何真實憑證。
 
+### Launchpad 出現重複的 SecureManage
+
+`build/` 裡編出來的 `.app` 會被 Spotlight 索引，於是 Launchpad 會同時列出
+`/Applications` 那個和建置產物，看起來像裝了好幾份。
+
+`scripts/install.sh` 裝完之後會把 `build/` 裡的那份刪掉。產物本來就能重新編出來，
+刪掉最乾脆；中間檔留著，下次重建一樣快。
+
+（在 `build/` 放 `.metadata_never_index` 是沒用的 —— 那個標記只在磁碟區根目錄生效，
+不適用於任意子目錄。）
+
+`flutter run -d macos` 的 Debug 產物也會被索引到，開發途中出現重複是正常的。要清掉：
+
+```bash
+rm -rf build/macos/Build/Products && killall Dock
+```
+
+`killall Dock` 只是讓 Dock 重畫，不會動到 Launchpad 的排列。
+
 ### 動效
 
 視覺動態取自內部素材庫（`192.168.162.158/motion/`）的編號，在 Flutter 重新實作：

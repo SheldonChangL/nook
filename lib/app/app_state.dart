@@ -202,6 +202,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLockOnAppSwitch(bool enabled) async {
+    settings.lockOnAppSwitch = enabled;
+    await store.saveSettings();
+    touch();
+    notifyListeners();
+  }
+
   Future<void> setClipboardSeconds(int seconds) async {
     settings.clipboardClearSeconds = seconds;
     clipboard.clearAfter = Duration(seconds: seconds);

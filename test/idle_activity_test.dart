@@ -7,6 +7,7 @@ import 'package:securemanage/app/app_state.dart';
 import 'package:securemanage/main.dart';
 import 'package:securemanage/services/biometric_gate.dart';
 import 'package:securemanage/vault/models.dart';
+import 'package:securemanage/vault/vault_crypto.dart';
 import 'package:securemanage/vault/vault_store.dart';
 
 /// 這幾個測試守的是一個實際踩到的狀況：新增項目打到一半被自動上鎖。
@@ -59,7 +60,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.runAsync(() async {
-      final seed = VaultStore(tmp);
+      final seed = VaultStore(tmp, kdfFactory: KdfParams.weakForTests);
       await seed.create(masterPassword);
       await seed.put(SecureKeyItem(
         name: '示範金鑰',
@@ -70,7 +71,7 @@ void main() {
     });
 
     final state =
-        AppState(store: VaultStore(tmp), biometrics: _NoBiometrics());
+        AppState(store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests), biometrics: _NoBiometrics());
     active = state;
     await tester.pumpWidget(SecureManageApp(state: state));
     await grind(tester);
@@ -152,6 +153,48 @@ void main() {
     expect(find.byType(Dialog), findsNothing,
         reason: '編輯器留在上鎖畫面上的話，已經展開的機密會繼續顯示在那裡');
     expect(find.text('halfway-typed'), findsNothing);
+    expect(find.text('解鎖保險庫'), findsOneWidget);
+  });
+
+  testWidgets('預設切換到其他 app 不會上鎖', (tester) async {
+    final state = await bootUnlocked(tester);
+    expect(state.settings.lockOnAppSwitch, isFalse, reason: '這個行為預設要關著');
+
+    // macOS 只要焦點切到別的 app 就會送 hidden（實測過），視窗不用被遮住。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await grind(tester, rounds: 4);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await grind(tester, rounds: 4);
+
+    expect(state.phase, VaultPhase.unlocked,
+        reason: '⌘Tab 切個視窗就被鎖掉的話根本沒辦法用');
+
+    // 回來的路徑也得照順序走，Flutter 不允許狀態亂跳。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await grind(tester, rounds: 4);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await grind(tester, rounds: 4);
+    expect(state.phase, VaultPhase.unlocked);
+  });
+
+  testWidgets('開了設定之後切換到其他 app 就會上鎖', (tester) async {
+    final state = await bootUnlocked(tester);
+    await tester.runAsync(() => state.setLockOnAppSwitch(true));
+    await grind(tester, rounds: 4);
+    expect(state.settings.lockOnAppSwitch, isTrue);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await grind(tester, rounds: 4);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await grind(tester, rounds: 4);
+    expect(state.phase, VaultPhase.locked);
+
+    // 停在 hidden 的時候 Flutter 不會產生畫面，所以要切回來才看得到上鎖畫面。
+    // 真實使用也是這樣：你切回 app 才會看到它鎖上了。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await grind(tester, rounds: 4);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await grind(tester, rounds: 4);
     expect(find.text('解鎖保險庫'), findsOneWidget);
   });
 

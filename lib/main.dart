@@ -49,10 +49,17 @@ class _SecureManageAppState extends State<SecureManageApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
-    // 切到背景就上鎖，不等閒置倒數。
+    if (_state.phase != VaultPhase.unlocked) return;
+    // macOS 只要焦點切到別的 app 就會送 hidden，視窗根本不用被遮住（實測過）。
+    // 所以預設不靠生命週期上鎖，不然 ⌘Tab 一次就鎖一次，完全沒辦法用。
+    // 要這個行為的人自己去設定裡開。
+    //
+    // 機器睡著的情況不必靠這裡：閒置判斷用的是真實經過時間，醒來第一次
+    // tick 就會發現超時而上鎖。
+    if (!_state.settings.lockOnAppSwitch) return;
     if (lifecycle == AppLifecycleState.hidden ||
         lifecycle == AppLifecycleState.paused) {
-      if (_state.phase == VaultPhase.unlocked) _state.lock();
+      _state.lock();
     }
   }
 

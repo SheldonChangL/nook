@@ -13,16 +13,22 @@ class VaultSettings {
     this.autoLockSeconds = 300,
     this.clipboardClearSeconds = 30,
     this.biometricEnabled = false,
+    this.lockOnAppSwitch = false,
   });
 
   int autoLockSeconds;
   int clipboardClearSeconds;
   bool biometricEnabled;
 
+  /// 一切換到別的 app 就立刻上鎖。預設關閉 —— macOS 只要焦點離開就會回報
+  /// hidden，開著的話 ⌘Tab 一次就被鎖掉，日常用起來很痛苦。
+  bool lockOnAppSwitch;
+
   Map<String, dynamic> toJson() => {
         'autoLockSeconds': autoLockSeconds,
         'clipboardClearSeconds': clipboardClearSeconds,
         'biometricEnabled': biometricEnabled,
+        'lockOnAppSwitch': lockOnAppSwitch,
       };
 
   factory VaultSettings.fromJson(Map<String, dynamic>? json) {
@@ -31,6 +37,7 @@ class VaultSettings {
       autoLockSeconds: json['autoLockSeconds'] as int? ?? 300,
       clipboardClearSeconds: json['clipboardClearSeconds'] as int? ?? 30,
       biometricEnabled: json['biometricEnabled'] as bool? ?? false,
+      lockOnAppSwitch: json['lockOnAppSwitch'] as bool? ?? false,
     );
   }
 }
@@ -43,9 +50,15 @@ class VaultSettings {
 ///
 /// 每筆一個檔是為了之後要做跨機同步時好合併，現在不實作同步，但格式先留著。
 class VaultStore {
-  VaultStore(this.root);
+  VaultStore(this.root, {KdfParams Function()? kdfFactory})
+      : _kdfFactory = kdfFactory ?? KdfParams.fresh;
 
   final Directory root;
+
+  /// 怎麼產生新的 KDF 參數。預設是正式強度；UI 測試會換成輕量版，
+  /// 不然幾個測試檔平行跑的時候每個都在算 128 MiB，機器會被壓垮。
+  /// 真正的強度由 vault_test 把關。
+  final KdfParams Function() _kdfFactory;
 
   File get _manifestFile => File('${root.path}/vault.json');
   Directory get _itemsDir => Directory('${root.path}/items');
@@ -82,7 +95,7 @@ class VaultStore {
     await root.create(recursive: true);
     await _itemsDir.create(recursive: true);
 
-    final params = KdfParams.fresh();
+    final params = _kdfFactory();
     final kek = await VaultCrypto.deriveKek(password, params);
     final dek = await VaultCrypto.newDek();
     final wrapped = await VaultCrypto.seal(kek, dek);
@@ -171,7 +184,7 @@ class VaultStore {
     final wrapped = base64Decode(manifest['wrappedDek'] as String);
     final dek = await VaultCrypto.open(oldKek, wrapped);
 
-    final freshParams = KdfParams.fresh();
+    final freshParams = _kdfFactory();
     final newKek = await VaultCrypto.deriveKek(newPassword, freshParams);
     final rewrapped = await VaultCrypto.seal(newKek, dek);
 

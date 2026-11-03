@@ -8,6 +8,7 @@ import 'package:securemanage/ui/home_screen.dart';
 import 'package:securemanage/ui/lock_screen.dart';
 import 'package:securemanage/ui/theme.dart';
 import 'package:securemanage/vault/models.dart';
+import 'package:securemanage/vault/vault_crypto.dart';
 import 'package:securemanage/vault/vault_store.dart';
 
 /// 驅動真實 UI 跑一輪：建立保險庫 → 新增項目 → 上鎖 → 用錯密碼 → 用對密碼 → 讀回。
@@ -87,7 +88,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final state =
-        AppState(store: VaultStore(tmp), biometrics: _NoBiometrics());
+        AppState(store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests), biometrics: _NoBiometrics());
     active = state;
     await state.boot();
     await tester.pumpWidget(harness(state));
@@ -99,7 +100,7 @@ void main() {
   Future<void> seedVault(
       WidgetTester tester, Future<void> Function(VaultStore) build) async {
     await tester.runAsync(() async {
-      final seed = VaultStore(tmp);
+      final seed = VaultStore(tmp, kdfFactory: KdfParams.weakForTests);
       await seed.create(masterPassword);
       await build(seed);
       seed.lock();

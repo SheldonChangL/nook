@@ -104,6 +104,14 @@ class KdfParams {
   final int parallelism;
   final Uint8List salt;
 
+  /// 測試用的輕量參數。只給 UI 測試用，正式路徑一律走 [fresh]。
+  static KdfParams weakForTests() => KdfParams(
+        memory: 256,
+        iterations: 1,
+        parallelism: 1,
+        salt: VaultCrypto.randomBytes(16),
+      );
+
   /// 新保險庫的預設強度。參數跟著每個保險庫走，以後調高不會讓舊檔打不開。
   static KdfParams fresh() => KdfParams(
         memory: 131072,

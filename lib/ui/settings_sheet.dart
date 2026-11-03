@@ -92,6 +92,26 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
+                      value: state.settings.lockOnAppSwitch,
+                      onChanged: (v) async {
+                        await state.setLockOnAppSwitch(v);
+                        setState(() {});
+                      },
+                      title: const Text('切換到其他 app 就立刻上鎖',
+                          style: TextStyle(fontSize: 13)),
+                      subtitle: Text(
+                        'macOS 只要焦點離開就算切換，所以開了之後每次 ⌘Tab 都會被鎖，'
+                        '要重打主密碼。閒置自動上鎖本來就擋得住離開座位的情況，'
+                        '除非你的螢幕常被旁人看到，否則不建議開。',
+                        style: TextStyle(
+                            fontSize: 11,
+                            height: 1.5,
+                            color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
                       value: state.biometricArmed,
                       onChanged: state.biometricAvailable
                           ? (v) async {

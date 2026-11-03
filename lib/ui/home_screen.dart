@@ -68,8 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openDetail(VaultItem item) {
     state.touch();
-    final stackBox =
-        _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     final rowBox =
         _rowKeys[item.id]?.currentContext?.findRenderObject() as RenderBox?;
     if (stackBox != null && rowBox != null) {
@@ -104,8 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _edit(VaultItem item) async {
     state.touch();
-    final saved =
-        await showItemEditor(context, state: state, existing: item);
+    final saved = await showItemEditor(context, state: state, existing: item);
     if (saved != null && mounted) {
       setState(() => _detailItem = state.store.byId(item.id));
     }
@@ -149,39 +147,41 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Actions(
         actions: {
           _PaletteIntent: CallbackAction<_PaletteIntent>(
-              onInvoke: (_) => _openPalette()),
-          _LockIntent:
-              CallbackAction<_LockIntent>(onInvoke: (_) => state.lock()),
+            onInvoke: (_) => _openPalette(),
+          ),
+          _LockIntent: CallbackAction<_LockIntent>(
+            onInvoke: (_) => state.lock(),
+          ),
           _NewIntent: CallbackAction<_NewIntent>(
-              onInvoke: (_) => _newItem(_filter ?? ItemKind.host)),
+            onInvoke: (_) => _newItem(_filter ?? ItemKind.host),
+          ),
         },
         child: Focus(
           autofocus: true,
-          child: Listener(
-            // 任何點擊都算活動，把自動上鎖的倒數推回去。
-            onPointerDown: (_) => state.touch(),
-            onPointerSignal: (_) => state.touch(),
-            child: Scaffold(
-              body: Stack(
-                key: _stackKey,
-                children: [
-                  Row(children: [
+          // 活動偵測統一在 main.dart 做：鍵盤走 HardwareKeyboard，滑鼠走包在
+          // Navigator 外面的 Listener，對話框裡的操作才算得到。
+          child: Scaffold(
+            body: Stack(
+              key: _stackKey,
+              children: [
+                Row(
+                  children: [
                     _sidebar(scheme),
                     const VerticalDivider(width: 0.5),
                     Expanded(child: _mainColumn(scheme)),
-                  ]),
-                  if (_detailItem != null) _detailLayer(),
-                  Positioned(
-                    left: 16,
-                    bottom: 16,
-                    child: ListenableBuilder(
-                      listenable: state.clipboard,
-                      builder: (context, _) =>
-                          ClipboardToast(guard: state.clipboard),
-                    ),
+                  ],
+                ),
+                if (_detailItem != null) _detailLayer(),
+                Positioned(
+                  left: 16,
+                  bottom: 16,
+                  child: ListenableBuilder(
+                    listenable: state.clipboard,
+                    builder: (context, _) =>
+                        ClipboardToast(guard: state.clipboard),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -208,29 +208,33 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 36),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-            child: Row(children: [
-              if (!_railCollapsed) ...[
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text('SecureManage',
+            child: Row(
+              children: [
+                if (!_railCollapsed) ...[
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'SecureManage',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500)),
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+                IconButton(
+                  icon: Icon(
+                    _railCollapsed ? Icons.chevron_right : Icons.chevron_left,
+                    size: 16,
+                  ),
+                  tooltip: _railCollapsed ? '展開側邊欄' : '收起側邊欄',
+                  onPressed: () =>
+                      setState(() => _railCollapsed = !_railCollapsed),
                 ),
               ],
-              IconButton(
-                icon: Icon(
-                    _railCollapsed
-                        ? Icons.chevron_right
-                        : Icons.chevron_left,
-                    size: 16),
-                tooltip: _railCollapsed ? '展開側邊欄' : '收起側邊欄',
-                onPressed: () =>
-                    setState(() => _railCollapsed = !_railCollapsed),
-              ),
-            ]),
+            ),
           ),
           _railTile(
             icon: Icons.inbox_outlined,
@@ -266,9 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _railTile(
                 icon: Icons.label_outline,
                 label: tag,
-                count: state.items
-                    .where((i) => i.tags.contains(tag))
-                    .length,
+                count: state.items.where((i) => i.tags.contains(tag)).length,
                 selected: _tagFilter == tag,
                 onTap: () => setState(() {
                   _tagFilter = tag;
@@ -282,11 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: '設定',
             onTap: () => showSettingsSheet(context, state: state),
           ),
-          _railTile(
-            icon: Icons.lock_outline,
-            label: '立刻上鎖',
-            onTap: state.lock,
-          ),
+          _railTile(icon: Icons.lock_outline, label: '立刻上鎖', onTap: state.lock),
           const SizedBox(height: 8),
         ],
       ),
@@ -312,31 +310,41 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(7),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            child: Row(children: [
-              Icon(icon,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
                   size: 16,
                   color: selected
                       ? scheme.onPrimaryContainer
-                      : scheme.onSurfaceVariant),
-              if (!_railCollapsed) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(label,
+                      : scheme.onSurfaceVariant,
+                ),
+                if (!_railCollapsed) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: 13,
-                          color: selected
-                              ? scheme.onPrimaryContainer
-                              : scheme.onSurface)),
-                ),
-                if (count != null)
-                  Text('$count',
+                        fontSize: 13,
+                        color: selected
+                            ? scheme.onPrimaryContainer
+                            : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  if (count != null)
+                    Text(
+                      '$count',
                       style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
               ],
-            ]),
+            ),
           ),
         ),
       ),
@@ -347,142 +355,165 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _mainColumn(ColorScheme scheme) {
     final items = _visible;
-    return Column(children: [
-      const SizedBox(height: 32),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-        child: Row(children: [
-          Expanded(
-            child: SizedBox(
-              height: 30,
-              child: TextField(
-                controller: _search,
-                onChanged: (_) {
-                  state.touch();
-                  setState(() {});
-                },
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: '搜尋名稱、主機、標籤',
-                  hintStyle: TextStyle(
-                      fontSize: 13, color: scheme.onSurfaceVariant),
-                  prefixIcon: const Icon(Icons.search, size: 15),
-                  prefixIconConstraints:
-                      const BoxConstraints(minWidth: 32),
-                  suffixIcon: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text('⌘K',
-                        style: monoStyle(
+    return Column(
+      children: [
+        const SizedBox(height: 32),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 30,
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (_) {
+                      state.touch();
+                      setState(() {});
+                    },
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: '搜尋名稱、主機、標籤',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 15),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                      suffixIcon: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          '⌘K',
+                          style: monoStyle(
                             fontSize: 11,
-                            color: scheme.onSurfaceVariant)),
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 36),
+                    ),
                   ),
-                  suffixIconConstraints:
-                      const BoxConstraints(minWidth: 36),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              _AddButton(onPick: _newItem),
+              const SizedBox(width: 8),
+              _LockCountdown(state: state),
+            ],
           ),
-          const SizedBox(width: 8),
-          _AddButton(onPick: _newItem),
-          const SizedBox(width: 8),
-          _LockCountdown(state: state),
-        ]),
-      ),
-      const Divider(height: 0.5),
-      Expanded(
-        child: items.isEmpty
-            ? _emptyState(scheme)
-            : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  final key =
-                      _rowKeys.putIfAbsent(item.id, () => GlobalKey());
-                  return RiseIn(
-                    key: ValueKey('rise-${item.id}'),
-                    delay: Motion.stagger * (index.clamp(0, 8)),
-                    child: Container(
-                      key: key,
-                      child: SweepRow(
-                        selected: _detailItem?.id == item.id,
-                        onTap: () => _openDetail(item),
-                        child: _row(item, scheme),
+        ),
+        const Divider(height: 0.5),
+        Expanded(
+          child: items.isEmpty
+              ? _emptyState(scheme)
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final key = _rowKeys.putIfAbsent(
+                      item.id,
+                      () => GlobalKey(),
+                    );
+                    return RiseIn(
+                      key: ValueKey('rise-${item.id}'),
+                      delay: Motion.stagger * (index.clamp(0, 8)),
+                      child: Container(
+                        key: key,
+                        child: SweepRow(
+                          selected: _detailItem?.id == item.id,
+                          onTap: () => _openDetail(item),
+                          child: _row(item, scheme),
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-      ),
-    ]);
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 
   Widget _row(VaultItem item, ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      child: Row(children: [
-        Icon(
-          switch (item.kind) {
-            ItemKind.host => Icons.dns_outlined,
-            ItemKind.secureKey => Icons.key_outlined,
-            ItemKind.account => Icons.person_outline,
-          },
-          size: 17,
-          color: scheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.name,
-                  style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w500)),
-              Text(
-                // 只放中繼資料。密碼與金鑰本體不出現在列表層。
-                item.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
-              ),
-            ],
+      child: Row(
+        children: [
+          Icon(
+            switch (item.kind) {
+              ItemKind.host => Icons.dns_outlined,
+              ItemKind.secureKey => Icons.key_outlined,
+              ItemKind.account => Icons.person_outline,
+            },
+            size: 17,
+            color: scheme.onSurfaceVariant,
           ),
-        ),
-        Text(_ago(item.updatedAt),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  // 只放中繼資料。密碼與金鑰本體不出現在列表層。
+                  item.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _ago(item.updatedAt),
             style: TextStyle(
-                fontSize: 11,
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.8))),
-        const SizedBox(width: 8),
-        Icon(Icons.arrow_forward,
+              fontSize: 11,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.arrow_forward,
             size: 14,
-            color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
-      ]),
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _emptyState(ColorScheme scheme) {
-    final filtered = _search.text.isNotEmpty ||
-        _filter != null ||
-        _tagFilter != null;
+    final filtered =
+        _search.text.isNotEmpty || _filter != null || _tagFilter != null;
     return Center(
       child: RiseIn(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_outlined,
-                size: 26,
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
+            Icon(
+              Icons.inbox_outlined,
+              size: 26,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
             const SizedBox(height: 10),
-            Text(filtered ? '沒有符合的項目' : '保險庫還是空的',
-                style: const TextStyle(fontSize: 14)),
+            Text(
+              filtered ? '沒有符合的項目' : '保險庫還是空的',
+              style: const TextStyle(fontSize: 14),
+            ),
             const SizedBox(height: 4),
             Text(
-                filtered
-                    ? '換個關鍵字，或清掉左邊的篩選'
-                    : '按右上角的「新增」記第一筆，主機、金鑰或帳號都行',
-                style: TextStyle(
-                    fontSize: 12, color: scheme.onSurfaceVariant)),
+              filtered ? '換個關鍵字，或清掉左邊的篩選' : '按右上角的「新增」記第一筆，主機、金鑰或帳號都行',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
           ],
         ),
       ),
@@ -503,43 +534,44 @@ class _HomeScreenState extends State<HomeScreen> {
     final rect = _expanded ? target : (_originRect ?? target);
 
     return Positioned.fill(
-      child: Stack(children: [
-        // 點面板外面就收起來。
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: _closeDetail,
-            behavior: HitTestBehavior.opaque,
+      child: Stack(
+        children: [
+          // 點面板外面就收起來。
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _closeDetail,
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedOpacity(
+                duration: Motion.base,
+                opacity: _expanded ? 1 : 0,
+                child: Container(color: Colors.black.withValues(alpha: 0.06)),
+              ),
+            ),
+          ),
+          AnimatedPositioned(
+            duration: Motion.panel,
+            curve: Motion.curve,
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
             child: AnimatedOpacity(
-              duration: Motion.base,
+              duration: Motion.fast,
               opacity: _expanded ? 1 : 0,
-              child: Container(
-                  color: Colors.black.withValues(alpha: 0.06)),
+              child: DetailPanel(
+                key: ValueKey(item.id),
+                state: state,
+                item: item,
+                visible: _expanded,
+                onClose: _closeDetail,
+                onEdit: () => _edit(item),
+                onDelete: () => _delete(item),
+                onOpenRef: _openDetail,
+              ),
             ),
           ),
-        ),
-        AnimatedPositioned(
-          duration: Motion.panel,
-          curve: Motion.curve,
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
-          child: AnimatedOpacity(
-            duration: Motion.fast,
-            opacity: _expanded ? 1 : 0,
-            child: DetailPanel(
-              key: ValueKey(item.id),
-              state: state,
-              item: item,
-              visible: _expanded,
-              onClose: _closeDetail,
-              onEdit: () => _edit(item),
-              onDelete: () => _delete(item),
-              onOpenRef: _openDetail,
-            ),
-          ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -571,13 +603,11 @@ class _AddButton extends StatelessWidget {
         for (final kind in ItemKind.values)
           MenuItemButton(
             onPressed: () => onPick(kind),
-            leadingIcon: Icon(
-                switch (kind) {
-                  ItemKind.host => Icons.dns_outlined,
-                  ItemKind.secureKey => Icons.key_outlined,
-                  ItemKind.account => Icons.person_outline,
-                },
-                size: 16),
+            leadingIcon: Icon(switch (kind) {
+              ItemKind.host => Icons.dns_outlined,
+              ItemKind.secureKey => Icons.key_outlined,
+              ItemKind.account => Icons.person_outline,
+            }, size: 16),
             child: Text(kind.label),
           ),
       ],
@@ -600,19 +630,24 @@ class _LockCountdown extends StatelessWidget {
     final soon = seconds <= 30;
     return Tooltip(
       message: '閒置滿 ${state.settings.autoLockSeconds ~/ 60} 分鐘自動上鎖．⌘L 立刻上鎖',
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.lock_open_outlined,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.lock_open_outlined,
             size: 14,
-            color: soon ? scheme.error : scheme.onSurfaceVariant),
-        const SizedBox(width: 5),
-        Text(
-          '$minutes:${rest.toString().padLeft(2, '0')}',
-          style: monoStyle(
-            fontSize: 12,
             color: soon ? scheme.error : scheme.onSurfaceVariant,
           ),
-        ),
-      ]),
+          const SizedBox(width: 5),
+          Text(
+            '$minutes:${rest.toString().padLeft(2, '0')}',
+            style: monoStyle(
+              fontSize: 12,
+              color: soon ? scheme.error : scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -628,8 +663,7 @@ class _ConfirmDeleteDialog extends StatelessWidget {
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
       child: AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         icon: Icon(Icons.delete_outline, color: scheme.error),
         title: Text('刪除「$name」？', style: const TextStyle(fontSize: 16)),
         content: const Text(

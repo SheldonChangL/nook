@@ -25,10 +25,13 @@ enum VaultPhase {
 }
 
 class AppState extends ChangeNotifier {
-  AppState({VaultStore? store, BiometricGate? biometrics, ClipboardGuard? clipboard})
-      : _injectedStore = store,
-        biometrics = biometrics ?? BiometricGate(),
-        clipboard = clipboard ?? ClipboardGuard();
+  AppState({
+    VaultStore? store,
+    BiometricGate? biometrics,
+    ClipboardGuard? clipboard,
+  }) : _injectedStore = store,
+       biometrics = biometrics ?? BiometricGate(),
+       clipboard = clipboard ?? ClipboardGuard();
 
   final VaultStore? _injectedStore;
   final BiometricGate biometrics;
@@ -47,22 +50,30 @@ class AppState extends ChangeNotifier {
   Timer? _idleTimer;
   DateTime _lastActivity = DateTime.now();
 
+  /// 上鎖時要收掉畫面上還開著的對話框，不然編輯器或詳情面板會留在上鎖畫面
+  /// 上面繼續顯示機密。由 main.dart 接上 Navigator。
+  VoidCallback? onLocked;
+
   /// 距離自動上鎖還有幾秒。
   int secondsUntilLock = 0;
+
+  /// 被當成「使用者還在操作」的次數。給測試確認鍵盤與對話框裡的動作真的有算到。
+  int touchCount = 0;
 
   String get vaultPath => store.root.path;
   List<VaultItem> get items => store.items;
   VaultSettings get settings => store.settings;
 
   Future<void> boot() async {
-    store = _injectedStore ??
-        VaultStore(Directory(
-            '${(await getApplicationSupportDirectory()).path}/vault'));
+    store =
+        _injectedStore ??
+        VaultStore(
+          Directory('${(await getApplicationSupportDirectory()).path}/vault'),
+        );
     biometricAvailable = await biometrics.isAvailable;
     biometricArmed = biometricAvailable && await biometrics.hasStoredKey;
     phase = store.exists ? VaultPhase.locked : VaultPhase.needsSetup;
-    clipboard.clearAfter =
-        Duration(seconds: store.exists ? 30 : 30);
+    clipboard.clearAfter = Duration(seconds: store.exists ? 30 : 30);
     notifyListeners();
   }
 
@@ -146,6 +157,7 @@ class AppState extends ChangeNotifier {
     if (phase != VaultPhase.unlocked) return;
     _lastActivity = DateTime.now();
     secondsUntilLock = settings.autoLockSeconds;
+    touchCount++;
   }
 
   void lock() {
@@ -155,6 +167,7 @@ class AppState extends ChangeNotifier {
     clipboard.clearNow();
     phase = VaultPhase.locked;
     secondsUntilLock = 0;
+    onLocked?.call();
     notifyListeners();
   }
 

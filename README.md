@@ -314,7 +314,7 @@ rm -rf build/macos/Build/Products && killall Dock
 
 ### 動效
 
-視覺動態取自內部素材庫（`192.168.162.158/motion/`）的編號，在 Flutter 重新實作：
+視覺動態取自一份內部素材庫的編號，在 Flutter 重新實作（編號對應該素材庫，外部看不到）：
 
 | 編號 | 用在哪 |
 |---|---|

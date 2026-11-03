@@ -69,26 +69,35 @@ void main() {
   });
 
   Widget harness(AppState state) => MaterialApp(
-        theme: AppTheme.light(),
-        home: ListenableBuilder(
-          listenable: state,
-          builder: (context, _) => switch (state.phase) {
-            VaultPhase.loading => const SizedBox.shrink(),
-            VaultPhase.needsSetup || VaultPhase.locked =>
-              LockScreen(key: const ValueKey('lock'), state: state),
-            VaultPhase.unlocked =>
-              HomeScreen(key: const ValueKey('home'), state: state),
-          },
+    theme: AppTheme.light(),
+    home: ListenableBuilder(
+      listenable: state,
+      builder: (context, _) => switch (state.phase) {
+        VaultPhase.loading => const SizedBox.shrink(),
+        VaultPhase.needsSetup || VaultPhase.locked => LockScreen(
+          key: const ValueKey('lock'),
+          state: state,
         ),
-      );
+        VaultPhase.unlocked => HomeScreen(
+          key: const ValueKey('home'),
+          state: state,
+        ),
+      },
+    ),
+  );
 
-  Future<AppState> boot(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1280, 860);
+  Future<AppState> boot(
+    WidgetTester tester, {
+    Size surfaceSize = const Size(1280, 860),
+  }) async {
+    tester.view.physicalSize = surfaceSize;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final state =
-        AppState(store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests), biometrics: _NoBiometrics());
+    final state = AppState(
+      store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests),
+      biometrics: _NoBiometrics(),
+    );
     active = state;
     await state.boot();
     await tester.pumpWidget(harness(state));
@@ -98,7 +107,9 @@ void main() {
 
   /// 在 widget 還沒掛上去之前做前置資料，這時沒有任何 timer，可以安心用 runAsync。
   Future<void> seedVault(
-      WidgetTester tester, Future<void> Function(VaultStore) build) async {
+    WidgetTester tester,
+    Future<void> Function(VaultStore) build,
+  ) async {
     await tester.runAsync(() async {
       final seed = VaultStore(tmp, kdfFactory: KdfParams.weakForTests);
       await seed.create(masterPassword);
@@ -107,8 +118,30 @@ void main() {
     });
   }
 
-  testWidgets('整輪流程：建立 → 新增 → 上鎖 → 用錯密碼 → 用對密碼 → 讀回',
-      (tester) async {
+  testWidgets('解鎖畫面在 compact 視窗使用 mockup 的構圖比例', (tester) async {
+    await seedVault(tester, (_) async {});
+    final state = await boot(tester, surfaceSize: const Size(540, 700));
+
+    expect(state.phase, VaultPhase.locked);
+    expect(find.byKey(const ValueKey('lock-brand')), findsOneWidget);
+    expect(find.byKey(const ValueKey('lock-door-scene')), findsOneWidget);
+    expect(find.byKey(const ValueKey('lock-form')), findsOneWidget);
+
+    final brand = tester.getRect(find.byKey(const ValueKey('lock-brand')));
+    final form = tester.getRect(find.byKey(const ValueKey('lock-form')));
+    final field = tester.getRect(find.byType(TextField).first);
+
+    expect(brand.left, closeTo(48, 1));
+    expect(brand.top, closeTo(56, 2));
+    expect(form.left, closeTo(48, 1));
+    // 標題底下多一行副標，表單上緣比純標題的 mockup 再高約 12pt。
+    expect(form.top, inInclusiveRange(396, 412));
+    expect(field.left, closeTo(48, 1));
+    expect(field.width, closeTo(444, 1));
+    expect(find.widgetWithText(FilledButton, '解除鎖定'), findsOneWidget);
+  });
+
+  testWidgets('整輪流程：建立 → 新增 → 上鎖 → 用錯密碼 → 用對密碼 → 讀回', (tester) async {
     final state = await boot(tester);
 
     // --- 建立保險庫 -------------------------------------------------
@@ -136,7 +169,9 @@ void main() {
 
     // 主畫面的搜尋框還在樹上，欄位要限定在對話框裡找。
     final fields = find.descendant(
-        of: find.byType(Dialog), matching: find.byType(TextField));
+      of: find.byType(Dialog),
+      matching: find.byType(TextField),
+    );
     await tester.enterText(fields.at(0), 'testbox'); // 名稱
     await tester.enterText(fields.at(1), '198.51.100.7'); // hostname
     await tester.enterText(fields.at(2), '2222'); // port
@@ -160,9 +195,8 @@ void main() {
     state.lock();
     await grind(tester);
     expect(state.phase, VaultPhase.locked);
-    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
-    expect(find.text('testbox'), findsNothing,
-        reason: '上鎖之後畫面上不該還看得到任何項目');
+    expect(find.text('解除鎖定並進入 Nook'), findsOneWidget);
+    expect(find.text('testbox'), findsNothing, reason: '上鎖之後畫面上不該還看得到任何項目');
 
     // --- 用錯的主密碼 -------------------------------------------------
     await tester.enterText(find.byType(TextField).first, 'definitely-wrong');
@@ -202,8 +236,7 @@ void main() {
 
     final state = await boot(tester);
 
-    expect(state.phase, VaultPhase.locked,
-        reason: '已經有保險庫就該停在上鎖畫面，不是設定畫面');
+    expect(state.phase, VaultPhase.locked, reason: '已經有保險庫就該停在上鎖畫面，不是設定畫面');
     expect(find.text('假的 wiki'), findsNothing);
 
     await tester.enterText(find.byType(TextField).first, masterPassword);
@@ -215,8 +248,10 @@ void main() {
 
     expect(state.phase, VaultPhase.unlocked);
     expect(find.text('假的 wiki'), findsOneWidget);
-    expect((state.store.byId(account.id) as AccountItem).password,
-        'fake-account-pw');
+    expect(
+      (state.store.byId(account.id) as AccountItem).password,
+      'fake-account-pw',
+    );
 
     // 密碼本身不該出現在列表層的任何文字上。
     expect(find.text('fake-account-pw'), findsNothing);
@@ -246,6 +281,24 @@ void main() {
     expect(firstField().controller?.text, 'something');
   });
 
+  testWidgets('深淺色可在鎖定畫面切換，進主畫面後維持', (tester) async {
+    final state = await boot(tester);
+
+    expect(state.darkAppearance, isTrue);
+    expect(find.byTooltip('切換為淺色模式'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('切換為淺色模式'));
+    await grind(tester);
+    expect(state.darkAppearance, isFalse);
+    expect(find.byTooltip('切換為深色模式'), findsOneWidget);
+
+    await tester.runAsync(() => state.createVault(masterPassword));
+    await grind(tester);
+    expect(state.phase, VaultPhase.unlocked);
+    expect(state.darkAppearance, isFalse);
+    expect(find.byTooltip('切換為深色模式'), findsOneWidget);
+  });
+
   testWidgets('閒置到時間會自動上鎖', (tester) async {
     await seedVault(tester, (seed) async {
       await seed.put(AccountItem(name: '假帳號', password: 'fake-pw'));
@@ -269,7 +322,8 @@ void main() {
     // timer 落在真實還是假的時鐘，取決於解鎖是在 runAsync 窗口內還是外完成，
     // 兩種情形都要能過。
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 3000)));
+      () => Future<void>.delayed(const Duration(milliseconds: 3000)),
+    );
     await grind(tester, rounds: 16, step: const Duration(milliseconds: 500));
 
     expect(state.phase, VaultPhase.locked);

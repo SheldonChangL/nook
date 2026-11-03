@@ -113,12 +113,16 @@ void main() {
   test('落地的檔案裡找不到任何明文，連項目名稱都看不到', () async {
     final store = VaultStore(tmp);
     await store.create(testPassword);
-    await store.put(HostItem(
-      name: 'secret-host-name',
-      hostname: '198.51.100.9',
-      sudoPassword: 'fake-sudo-pw',
-      env: [EnvVar(name: 'FAKE_TOKEN', value: 'fake-token-value', secret: true)],
-    ));
+    await store.put(
+      HostItem(
+        name: 'secret-host-name',
+        hostname: '198.51.100.9',
+        sudoPassword: 'fake-sudo-pw',
+        env: [
+          EnvVar(name: 'FAKE_TOKEN', value: 'fake-token-value', secret: true),
+        ],
+      ),
+    );
 
     final needles = [
       'secret-host-name',
@@ -129,18 +133,18 @@ void main() {
       testPassword,
     ];
 
-    final files = tmp
-        .listSync(recursive: true)
-        .whereType<File>()
-        .toList();
+    final files = tmp.listSync(recursive: true).whereType<File>().toList();
     expect(files.length, greaterThanOrEqualTo(2));
 
     for (final file in files) {
       final bytes = file.readAsBytesSync();
       final asText = String.fromCharCodes(bytes);
       for (final needle in needles) {
-        expect(asText.contains(needle), isFalse,
-            reason: '${file.path} 裡出現了明文「$needle」');
+        expect(
+          asText.contains(needle),
+          isFalse,
+          reason: '${file.path} 裡出現了明文「$needle」',
+        );
       }
     }
   });
@@ -197,16 +201,35 @@ void main() {
     expect((reopened.byId(item.id) as AccountItem).password, 'fake-pw');
   });
 
+  test('外觀模式會寫進公開設定，尚未解鎖也讀得到', () async {
+    final store = VaultStore(tmp);
+    await store.create(testPassword);
+    store.settings.darkAppearance = false;
+    await store.saveSettings();
+    store.lock();
+
+    final reopened = VaultStore(tmp);
+    await reopened.loadSettings();
+
+    expect(reopened.isUnlocked, isFalse);
+    expect(reopened.settings.darkAppearance, isFalse);
+  });
+
   test('Argon2id 解鎖耗時落在可接受範圍', () async {
     final params = KdfParams.fresh();
     final watch = Stopwatch()..start();
     await VaultCrypto.deriveKek(testPassword, params);
     watch.stop();
     // ignore: avoid_print
-    print('Argon2id(memory=${params.memory}KiB, iterations=${params.iterations})'
-        ' 耗時 ${watch.elapsedMilliseconds} ms');
-    expect(watch.elapsedMilliseconds, greaterThan(50),
-        reason: '太快代表參數被調弱了，擋不住暴力破解');
+    print(
+      'Argon2id(memory=${params.memory}KiB, iterations=${params.iterations})'
+      ' 耗時 ${watch.elapsedMilliseconds} ms',
+    );
+    expect(
+      watch.elapsedMilliseconds,
+      greaterThan(50),
+      reason: '太快代表參數被調弱了，擋不住暴力破解',
+    );
   });
 
   test('magic 不對的檔案會被擋下來', () async {

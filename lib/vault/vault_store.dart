@@ -14,6 +14,7 @@ class VaultSettings {
     this.clipboardClearSeconds = 30,
     this.biometricEnabled = false,
     this.lockOnAppSwitch = false,
+    this.darkAppearance = true,
   });
 
   int autoLockSeconds;
@@ -24,12 +25,16 @@ class VaultSettings {
   /// hidden，開著的話 ⌘Tab 一次就被鎖掉，日常用起來很痛苦。
   bool lockOnAppSwitch;
 
+  /// UI 外觀不是機密，跟其他偏好一起放在 vault.json 的公開設定區。
+  bool darkAppearance;
+
   Map<String, dynamic> toJson() => {
-        'autoLockSeconds': autoLockSeconds,
-        'clipboardClearSeconds': clipboardClearSeconds,
-        'biometricEnabled': biometricEnabled,
-        'lockOnAppSwitch': lockOnAppSwitch,
-      };
+    'autoLockSeconds': autoLockSeconds,
+    'clipboardClearSeconds': clipboardClearSeconds,
+    'biometricEnabled': biometricEnabled,
+    'lockOnAppSwitch': lockOnAppSwitch,
+    'darkAppearance': darkAppearance,
+  };
 
   factory VaultSettings.fromJson(Map<String, dynamic>? json) {
     if (json == null) return VaultSettings();
@@ -38,6 +43,7 @@ class VaultSettings {
       clipboardClearSeconds: json['clipboardClearSeconds'] as int? ?? 30,
       biometricEnabled: json['biometricEnabled'] as bool? ?? false,
       lockOnAppSwitch: json['lockOnAppSwitch'] as bool? ?? false,
+      darkAppearance: json['darkAppearance'] as bool? ?? true,
     );
   }
 }
@@ -51,7 +57,7 @@ class VaultSettings {
 /// 每筆一個檔是為了之後要做跨機同步時好合併，現在不實作同步，但格式先留著。
 class VaultStore {
   VaultStore(this.root, {KdfParams Function()? kdfFactory})
-      : _kdfFactory = kdfFactory ?? KdfParams.fresh;
+    : _kdfFactory = kdfFactory ?? KdfParams.fresh;
 
   final Directory root;
 
@@ -121,7 +127,8 @@ class VaultStore {
     _kdfParams = params;
     _dek = SecretKey(dek);
     _settings = VaultSettings.fromJson(
-        manifest['settings'] as Map<String, dynamic>?);
+      manifest['settings'] as Map<String, dynamic>?,
+    );
     await _loadItems();
   }
 
@@ -131,7 +138,8 @@ class VaultStore {
     _kdfParams = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
     _dek = SecretKey(dek);
     _settings = VaultSettings.fromJson(
-        manifest['settings'] as Map<String, dynamic>?);
+      manifest['settings'] as Map<String, dynamic>?,
+    );
     try {
       await _loadItems();
     } catch (_) {
@@ -196,7 +204,30 @@ class VaultStore {
 
   Future<void> saveSettings() async {
     final manifest = await _readManifest();
+    _kdfParams ??= KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
     await _writeManifest(base64Decode(manifest['wrappedDek'] as String));
+  }
+
+  /// 設定本來就在 vault.json 的明文區；鎖定畫面需要先知道外觀，因此不解密
+  /// 任何項目也能讀取。這個方法不會設定 DEK，也不會載入項目。
+  Future<void> loadSettings() async {
+    loadSettingsSync();
+  }
+
+  /// 啟動畫面只需讀取很小的公開 manifest。同步版本讓 widget test 的假時鐘
+  /// 與正式啟動流程都不必等待檔案事件迴圈；不會讀取或解密任何項目。
+  void loadSettingsSync() {
+    if (!exists) throw const VaultOpenException('這裡還沒有保險庫');
+    final raw = _manifestFile.readAsStringSync();
+    final manifest = jsonDecode(raw) as Map<String, dynamic>;
+    final version = manifest['version'] as int? ?? 0;
+    if (version != 1) {
+      throw VaultOpenException('不認得的保險庫格式版本：$version');
+    }
+    _kdfParams = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
+    _settings = VaultSettings.fromJson(
+      manifest['settings'] as Map<String, dynamic>?,
+    );
   }
 
   // ---------------------------------------------------------------- 內部
@@ -232,15 +263,15 @@ class VaultStore {
   Future<void> _loadItems() async {
     _items.clear();
     if (!_itemsDir.existsSync()) return;
-    final files = _itemsDir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.item'));
+    final files = _itemsDir.listSync().whereType<File>().where(
+      (f) => f.path.endsWith('.item'),
+    );
     for (final file in files) {
       final sealed = await file.readAsBytes();
       final clear = await VaultCrypto.open(_dek!, sealed);
       final item = VaultItem.fromJson(
-          jsonDecode(utf8.decode(clear)) as Map<String, dynamic>);
+        jsonDecode(utf8.decode(clear)) as Map<String, dynamic>,
+      );
       _items[item.id] = item;
     }
   }

@@ -62,16 +62,20 @@ void main() {
     await tester.runAsync(() async {
       final seed = VaultStore(tmp, kdfFactory: KdfParams.weakForTests);
       await seed.create(masterPassword);
-      await seed.put(SecureKeyItem(
-        name: '示範金鑰',
-        algorithm: 'ed25519',
-        secret: 'FAKE-KEY-BODY',
-      ));
+      await seed.put(
+        SecureKeyItem(
+          name: '示範金鑰',
+          algorithm: 'ed25519',
+          secret: 'FAKE-KEY-BODY',
+        ),
+      );
       seed.lock();
     });
 
-    final state =
-        AppState(store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests), biometrics: _NoBiometrics());
+    final state = AppState(
+      store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests),
+      biometrics: _NoBiometrics(),
+    );
     active = state;
     await tester.pumpWidget(NookApp(state: state));
     await grind(tester);
@@ -114,8 +118,11 @@ void main() {
     await grind(tester);
 
     expect(find.text('新增金鑰'), findsOneWidget);
-    expect(find.byType(MenuItemButton), findsNothing,
-        reason: '已經在金鑰分類了，不該再問一次要新增哪一種');
+    expect(
+      find.byType(MenuItemButton),
+      findsNothing,
+      reason: '已經在金鑰分類了，不該再問一次要新增哪一種',
+    );
   });
 
   testWidgets('打字算活動，會把自動上鎖的倒數推回去', (tester) async {
@@ -125,8 +132,11 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     await grind(tester, rounds: 2);
 
-    expect(state.touchCount, greaterThan(before),
-        reason: '鍵盤輸入沒有被算成活動，打字打到一半就會被上鎖');
+    expect(
+      state.touchCount,
+      greaterThan(before),
+      reason: '鍵盤輸入沒有被算成活動，打字打到一半就會被上鎖',
+    );
   });
 
   testWidgets('在新增對話框裡打字也算活動', (tester) async {
@@ -137,8 +147,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
     await grind(tester, rounds: 2);
 
-    expect(state.touchCount, greaterThan(before),
-        reason: '對話框開著的時候鍵盤事件必須照樣算數');
+    expect(state.touchCount, greaterThan(before), reason: '對話框開著的時候鍵盤事件必須照樣算數');
   });
 
   testWidgets('在新增對話框裡點滑鼠也算活動', (tester) async {
@@ -148,12 +157,18 @@ void main() {
     final before = state.touchCount;
     // 點對話框裡的欄位。這個事件走的是 Navigator 上另一個 route，
     // 掛在 HomeScreen 裡的 Listener 收不到。
-    await tester.tap(find.descendant(
-        of: find.byType(Dialog), matching: find.byType(TextField)).first);
+    await tester.tap(
+      find
+          .descendant(of: find.byType(Dialog), matching: find.byType(TextField))
+          .first,
+    );
     await grind(tester, rounds: 2);
 
-    expect(state.touchCount, greaterThan(before),
-        reason: '對話框裡的點擊沒算到，填表途中就會被上鎖');
+    expect(
+      state.touchCount,
+      greaterThan(before),
+      reason: '對話框裡的點擊沒算到，填表途中就會被上鎖',
+    );
   });
 
   testWidgets('上鎖時會把還開著的對話框收掉', (tester) async {
@@ -162,7 +177,9 @@ void main() {
 
     // 在 sudo 密碼欄位打字，模擬填到一半。
     final fields = find.descendant(
-        of: find.byType(Dialog), matching: find.byType(TextField));
+      of: find.byType(Dialog),
+      matching: find.byType(TextField),
+    );
     await tester.enterText(fields.at(0), 'halfway-typed');
     await grind(tester);
     expect(find.byType(Dialog), findsOneWidget);
@@ -171,10 +188,13 @@ void main() {
     await grind(tester);
 
     expect(state.phase, VaultPhase.locked);
-    expect(find.byType(Dialog), findsNothing,
-        reason: '編輯器留在上鎖畫面上的話，已經展開的機密會繼續顯示在那裡');
+    expect(
+      find.byType(Dialog),
+      findsNothing,
+      reason: '編輯器留在上鎖畫面上的話，已經展開的機密會繼續顯示在那裡',
+    );
     expect(find.text('halfway-typed'), findsNothing);
-    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
+    expect(find.text('解除鎖定並進入 Nook'), findsOneWidget);
   });
 
   testWidgets('預設切換到其他 app 不會上鎖', (tester) async {
@@ -187,8 +207,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     await grind(tester, rounds: 4);
 
-    expect(state.phase, VaultPhase.unlocked,
-        reason: '⌘Tab 切個視窗就被鎖掉的話根本沒辦法用');
+    expect(state.phase, VaultPhase.unlocked, reason: '⌘Tab 切個視窗就被鎖掉的話根本沒辦法用');
 
     // 回來的路徑也得照順序走，Flutter 不允許狀態亂跳。
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -216,7 +235,7 @@ void main() {
     await grind(tester, rounds: 4);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await grind(tester, rounds: 4);
-    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
+    expect(find.text('解除鎖定並進入 Nook'), findsOneWidget);
   });
 
   testWidgets('上鎖時也會把詳情面板收掉', (tester) async {
@@ -229,6 +248,6 @@ void main() {
 
     expect(state.phase, VaultPhase.locked);
     expect(find.text('示範金鑰'), findsNothing);
-    expect(find.text('請輸入主密碼以存取你的資料'), findsOneWidget);
+    expect(find.text('解除鎖定並進入 Nook'), findsOneWidget);
   });
 }

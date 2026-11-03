@@ -46,6 +46,7 @@ class AppState extends ChangeNotifier {
   bool busy = false;
   bool biometricAvailable = false;
   bool biometricArmed = false;
+  bool darkAppearance = true;
 
   Timer? _idleTimer;
   DateTime _lastActivity = DateTime.now();
@@ -70,10 +71,15 @@ class AppState extends ChangeNotifier {
         VaultStore(
           Directory('${(await getApplicationSupportDirectory()).path}/vault'),
         );
+    final exists = store.exists;
+    phase = exists ? VaultPhase.locked : VaultPhase.needsSetup;
+    notifyListeners();
+
+    if (exists) store.loadSettingsSync();
+    darkAppearance = store.settings.darkAppearance;
     biometricAvailable = await biometrics.isAvailable;
     biometricArmed = biometricAvailable && await biometrics.hasStoredKey;
-    phase = store.exists ? VaultPhase.locked : VaultPhase.needsSetup;
-    clipboard.clearAfter = Duration(seconds: store.exists ? 30 : 30);
+    clipboard.clearAfter = const Duration(seconds: 30);
     notifyListeners();
   }
 
@@ -81,7 +87,10 @@ class AppState extends ChangeNotifier {
 
   Future<bool> createVault(String password) async {
     return _guard(() async {
+      final preferredAppearance = darkAppearance;
       await store.create(password);
+      settings.darkAppearance = preferredAppearance;
+      if (!preferredAppearance) await store.saveSettings();
       _afterUnlock();
       return true;
     });
@@ -209,6 +218,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleAppearance() async {
+    darkAppearance = !darkAppearance;
+    settings.darkAppearance = darkAppearance;
+    notifyListeners();
+    if (store.exists) await store.saveSettings();
+  }
+
   Future<void> setClipboardSeconds(int seconds) async {
     settings.clipboardClearSeconds = seconds;
     clipboard.clearAfter = Duration(seconds: seconds);
@@ -242,8 +258,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> copySecret(String value,
-      {required String label, VaultItem? item}) async {
+  Future<void> copySecret(
+    String value, {
+    required String label,
+    VaultItem? item,
+  }) async {
     touch();
     await clipboard.copy(value, label: label);
     if (item != null) await markAccessed(item);

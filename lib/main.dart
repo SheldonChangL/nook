@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,10 +24,13 @@ class NookApp extends StatefulWidget {
   State<NookApp> createState() => _NookAppState();
 }
 
-class _NookAppState extends State<NookApp>
-    with WidgetsBindingObserver {
+class _NookAppState extends State<NookApp> with WidgetsBindingObserver {
+  static const _windowChannel = MethodChannel('nook/window');
+
   late final AppState _state = widget.state ?? AppState();
   final _navigator = GlobalKey<NavigatorState>();
+  bool? _lastCompactWindow;
+  bool? _lastDarkWindow;
 
   @override
   void initState() {
@@ -38,7 +43,32 @@ class _NookAppState extends State<NookApp>
     // 上鎖時把還開著的對話框收掉，不然編輯器會留在上鎖畫面上繼續顯示機密。
     _state.onLocked = () =>
         _navigator.currentState?.popUntil((route) => route.isFirst);
+    _state.addListener(_syncWindowMode);
     _state.boot();
+  }
+
+  void _syncWindowMode() {
+    // 測試注入的狀態沒有原生 Runner，不應呼叫 platform channel。
+    if (widget.state != null) return;
+    final compact = _state.phase != VaultPhase.unlocked;
+    if (_lastCompactWindow != compact) {
+      _lastCompactWindow = compact;
+      unawaited(
+        _windowChannel
+            .invokeMethod<void>('setMode', compact ? 'lock' : 'vault')
+            .catchError((_) {}),
+      );
+    }
+    // 標題列也要跟著深淺色走，不然深色鎖定畫面頂著一條白色標題列。
+    final dark = _state.darkAppearance;
+    if (_lastDarkWindow != dark) {
+      _lastDarkWindow = dark;
+      unawaited(
+        _windowChannel
+            .invokeMethod<void>('setAppearance', dark ? 'dark' : 'light')
+            .catchError((_) {}),
+      );
+    }
   }
 
   /// 只是記錄「有人在操作」，不攔截任何按鍵。
@@ -67,6 +97,7 @@ class _NookAppState extends State<NookApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _state.removeListener(_syncWindowMode);
     _state.onLocked = null;
     // 外面塞進來的狀態由外面負責釋放，這裡只收自己建的那個。
     if (widget.state == null) _state.dispose();
@@ -81,6 +112,7 @@ class _NookAppState extends State<NookApp>
       navigatorKey: _navigator,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      themeMode: _state.darkAppearance ? ThemeMode.dark : ThemeMode.light,
       // builder 包在 Navigator 外面，所以對話框裡的滑鼠動作也算數。
       builder: (context, child) => Listener(
         behavior: HitTestBehavior.translucent,

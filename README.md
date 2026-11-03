@@ -27,13 +27,15 @@ cd ~/Projects/Private/SecureManage && flutter pub get
 flutter run -d macos
 ```
 
-做一份正式的 app 出來：
+做一份正式的 app 並裝到 `/Applications`：
 
 ```bash
-flutter build macos --release
+./scripts/install.sh
 ```
 
-產出在 `build/macos/Build/Products/Release/securemanage.app`，拖進 `/Applications` 就能用。
+**不要只是把 build 出來的 app 拖進 `/Applications` 之後自己 `codesign --deep --sign -`** ——
+那會把 entitlements 整個剝掉，沙盒和「沒有網路權限」這兩件事會一起消失。腳本裡有說明，
+而且會在簽完之後檢查沙盒還在、`get-task-allow` 已經拿掉。
 
 ---
 
@@ -102,6 +104,16 @@ ChaCha20-Poly1305 帶認證標籤，檔案被改過會驗證失敗，而不是�
 - app 切到背景立刻上鎖，不等倒數
 - 上鎖時記憶體裡的金鑰與已解密的項目一起清掉
 - 複製後預設 30 秒清剪貼簿。**清之前會先確認剪貼簿裡還是我們放的那段**；你後來複製了別的東西就不會被吃掉
+
+### 簽章
+
+安裝腳本重簽一次，是為了拿掉 Xcode 本機簽章時塞進來的
+`com.apple.security.get-task-allow` —— 那個 entitlement 允許別的程序掛除錯器進來讀記憶體，
+對一個把主金鑰放在記憶體裡的 app 來說不該留著。簽完只剩 `com.apple.security.app-sandbox`。
+
+```bash
+codesign -d --entitlements - /Applications/SecureManage.app
+```
 
 ### 刻意沒做的事
 
@@ -226,3 +238,24 @@ flutter test test/render_screens_test.dart --update-goldens
 | #249 回車化膠囊 | 標籤輸入 |
 
 版面參考素材庫模板：Keyhollow（上鎖畫面的左右分欄）、Docmoor（側邊欄）、Togglet（設定頁）。
+
+
+---
+
+## Icon
+
+icon 是用 CoreGraphics 直接畫出來的，沒有依賴任何設計工具，所以改色改形狀就是改程式。
+
+```bash
+./design/build_icons.sh
+```
+
+這支會重算所有尺寸、放進 `macos/Runner/Assets.xcassets/AppIcon.appiconset/`，
+並產生一份 `design/out/SecureManage.icns`（給不經過 Xcode 打包的場合用，例如做 DMG）。
+
+造型與顏色都在 [design/render_icon.swift](design/render_icon.swift)：
+深藍 squircle 底板加白色盾牌，盾牌上挖一個鑰匙孔。盾牌呼應 app 裡的鎖定圖示，
+鑰匙孔是負空間而不是另一個顏色，所以縮到 16px 還認得出來。
+
+每個尺寸是各自重畫的，不是從 1024 縮下來，小尺寸的邊緣才不會糊掉。
+日後加上 iOS / Android 平台時，同一支腳本改一下輸出清單就能產那兩邊的 icon set。

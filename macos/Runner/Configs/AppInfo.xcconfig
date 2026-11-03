@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = securemanage
+PRODUCT_NAME = SecureManage
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = tw.com.jetopto.securemanage
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 tw.com.jetopto. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Sheldon Chang. All rights reserved.

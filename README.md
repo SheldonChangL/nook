@@ -137,6 +137,40 @@ codesign -d --entitlements - /Applications/SecureManage.app
 
 關掉 Touch ID 會把 Keychain 裡那份刪掉。
 
+### 為什麼不放進 iCloud Keychain
+
+Keychain 那份明確設成不同步，這是刻意的，不是漏了設：
+
+```dart
+accessibility: KeychainAccessibility.first_unlock_this_device,
+synchronizable: false,
+```
+
+`first_unlock_this_device` 的意思就是「這台裝置專屬，不進備份、不進 iCloud」。
+
+**理由是信任域不能合一。** 現在是兩道鎖放在不同地方：加密後的保險庫檔在這台機器上，
+開鎖的東西在你腦袋裡。把金鑰丟進 iCloud Keychain，等於宣告「拿到我的 Apple ID 的人就
+拿到我全部的機密」—— 而 Apple ID 是收信、登入一堆服務、而且天天帶在手機上的那個帳號。
+
+之後真的做了跨機同步，這件事會更嚴重：保險庫檔很可能走 iCloud Drive。那時候
+**密文和金鑰會躺在同一個帳號底下**，加密就白做了。所以同步的時候要同步的是檔案，
+金鑰留在各台機器自己手上（見「跨機同步」）。
+
+還有一層：iCloud Keychain 的救援機制是用裝置密碼去解 Apple 的託管紀錄，那通常是六位
+數字。Apple 用 HSM 限制嘗試次數，但保險庫的強度就從 Argon2id 128 MiB 掉到「六位數加上
+別人家伺服器的防護」—— 防護主體從數學變成了某個服務的可用性。
+
+另外還有個現實阻礙：要用 iCloud Keychain 同步，app 得帶 `keychain-access-groups`
+entitlement，那需要正式開發憑證加 provisioning profile，等於把這個私人工具綁到公司的
+Team ID 上。現在是 ad-hoc 簽章，刻意不綁任何團隊帳號。
+
+**如果動機是不想每次打主密碼**，Touch ID 已經解決了，而且不需要雲端：每台機器各自保管
+一份，在新機器上手動輸入一次主密碼、開啟 Touch ID，之後那台就不用再打，金鑰從頭到尾
+沒離開過各自的機器。
+
+**如果動機是怕忘記**，正確做法是把主密碼放進另一個信任域 —— 紙本，或你已經在用的另一套
+密碼管理工具。重點是別跟保險庫檔放在同一個帳號底下。
+
 ---
 
 ## 資料檔位置
@@ -197,6 +231,10 @@ cp -R "$VAULT" ~/Dropbox/securemanage-backup-$(date +%Y%m%d)
 這一版沒有做，但格式已經留好了：每筆項目是獨立的加密檔，各自帶 `updatedAt`。之後要同步，把 `vault/` 丟進你自己的 git repo 或用 rsync 搬就行，衝突以 `updatedAt` 判斷。
 
 現在如果要在兩台機器用，就手動複製資料夾（見上面的備份與還原）。
+
+不管用哪種管道搬，**只搬檔案，不要搬金鑰**。主密碼在你腦袋裡、Touch ID 的那份在各台機器
+的 Keychain 裡，兩邊都不該進同步管道。這樣就算同步的地方外洩，拿到的也只是一堆密文。
+把金鑰也放上雲端為什麼是壞主意，見上面「為什麼不放進 iCloud Keychain」。
 
 ---
 

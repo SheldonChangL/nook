@@ -1,5 +1,8 @@
 # Nook
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-%E8%AB%8B%E6%88%91%E5%96%9D%E6%9D%AF%E5%92%96%E5%95%A1-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/sheldonchang)
+
 本機用的機密資料管理工具。管三類東西：
 
 | 類型 | 存什麼 |
@@ -363,3 +366,13 @@ icon 是用 CoreGraphics 直接畫出來的，沒有依賴任何設計工具，�
 這是個人自用的工具，照你自己的判斷使用。原始碼公開，加密的部分全部用
 `package:cryptography` 的成熟實作，沒有任何自製的密碼學 —— 歡迎自己讀過再決定
 要不要把真的機密放進去。
+
+---
+
+## 支持
+
+這個工具是自己要用才做的，放出來給有同樣需求的人。覺得有用的話：
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-%E8%AB%8B%E6%88%91%E5%96%9D%E6%9D%AF%E5%92%96%E5%95%A1-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/sheldonchang)
+
+https://ko-fi.com/sheldonchang

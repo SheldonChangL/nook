@@ -17,7 +17,7 @@ class BiometricGate {
         _storage = storage ??
             const FlutterSecureStorage(
               mOptions: MacOsOptions(
-                accountName: 'tw.com.jetopto.securemanage',
+                accountName: 'tw.com.jetopto.nook',
                 accessibility: KeychainAccessibility.first_unlock_this_device,
                 synchronizable: false,
               ),
@@ -70,7 +70,7 @@ class BiometricGate {
   Future<List<int>?> unlock() async {
     final stored = await _storage.read(key: _dekKey);
     if (stored == null) return null;
-    if (!await _authenticate('用 Touch ID 解鎖 SecureManage')) return null;
+    if (!await _authenticate('用 Touch ID 解鎖 Nook')) return null;
     return base64Decode(stored);
   }
 

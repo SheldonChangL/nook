@@ -20,17 +20,17 @@ class LockScreen extends StatefulWidget {
   State<LockScreen> createState() => _LockScreenState();
 }
 
-// palette.json 的色票。
-const _brandBlueDark = Color(0xFF0D5C96);
-const _brandBlue = Color(0xFF1878BE);
-const _brandBlueBright = Color(0xFF2F8EDB);
-const _surface = Color(0xFFFCFCFB);
-const _surfaceAlt = Color(0xFFF3F6FA);
-const _textPrimary = Color(0xFF17212B);
-const _textSecondary = Color(0xFF66707A);
-const _border = Color(0xFFD7DEE7);
+// palette.json 的色票，定義在 theme.dart，主畫面共用同一組。
+const _brandBlueDark = brandBlueDark;
+const _brandBlue = brandBlue;
+const _brandBlueBright = brandBlueBright;
+const _surface = brandSurface;
+const _surfaceAlt = brandSurfaceAlt;
+const _textPrimary = brandTextPrimary;
+const _textSecondary = brandTextSecondary;
+const _border = brandBorder;
 
-const _assets = 'SecureManage_UI_Assets';
+const _assets = brandAssets;
 
 class _LockScreenState extends State<LockScreen> {
   final _password = TextEditingController();
@@ -160,10 +160,25 @@ class _LockScreenState extends State<LockScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          SvgPicture.asset(
-            '$_assets/backgrounds/left_panel.svg',
-            fit: BoxFit.cover,
-            alignment: Alignment.bottomCenter,
+          // 素材的 left_panel.svg 是淺藍漸層，mockup 要的是飽和深藍。
+          // 用品牌漸層打底，再把那張淡淡疊上去，保留它的波浪層次。
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [_brandBlueBright, _brandBlueDark],
+              ),
+            ),
+            child: SizedBox.expand(),
+          ),
+          Opacity(
+            opacity: 0.22,
+            child: SvgPicture.asset(
+              '$_assets/backgrounds/left_panel.svg',
+              fit: BoxFit.cover,
+              alignment: Alignment.bottomCenter,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(44, 30, 72, 34),
@@ -175,10 +190,11 @@ class _LockScreenState extends State<LockScreen> {
                   child: Center(
                     child: RiseIn(
                       delay: Motion.stagger,
-                      // 用去背的向量版。素材包原本的 PNG 底色是不透明的淺藍
-                      // （四角 alpha 約 250），疊在面板上會露出一個方框。
+                      // 素材包原本的 PNG 底色是不透明的淺藍（四角 alpha 約
+                      // 250），疊在面板上會露出方框，所以用去背的向量版；
+                      // 而且面板改成深藍之後要用亮色那一版才分得出來。
                       child: SvgPicture.asset(
-                        '$_assets/hero/securemanage_hero_transparent.svg',
+                        '$_assets/hero/hero_on_dark.svg',
                         fit: BoxFit.contain,
                       ),
                     ),
@@ -192,7 +208,7 @@ class _LockScreenState extends State<LockScreen> {
                       fontSize: 34,
                       fontWeight: FontWeight.w600,
                       height: 1.25,
-                      color: _brandBlueDark,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -204,7 +220,7 @@ class _LockScreenState extends State<LockScreen> {
                     width: 46,
                     height: 3,
                     decoration: BoxDecoration(
-                      color: _brandBlue,
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -217,7 +233,7 @@ class _LockScreenState extends State<LockScreen> {
                     style: TextStyle(
                       fontSize: 15,
                       height: 1.6,
-                      color: _brandBlueDark,
+                      color: Color(0xE6FFFFFF),
                     ),
                   ),
                 ),
@@ -238,15 +254,15 @@ class _LockScreenState extends State<LockScreen> {
           '$_assets/icons/shield.svg',
           width: 24,
           height: 24,
-          colorFilter: const ColorFilter.mode(_brandBlueDark, BlendMode.srcIn),
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
         const SizedBox(width: 10),
         const Text(
-          'SecureManage',
+          'Nook',
           style: TextStyle(
             fontSize: 19,
             fontWeight: FontWeight.w600,
-            color: _brandBlueDark,
+            color: Colors.white,
           ),
         ),
       ],
@@ -271,7 +287,7 @@ class _LockScreenState extends State<LockScreen> {
           Container(
             width: 1,
             height: 46,
-            color: _brandBlueDark.withValues(alpha: 0.18),
+            color: Colors.white.withValues(alpha: 0.28),
           ),
         );
       }
@@ -284,7 +300,7 @@ class _LockScreenState extends State<LockScreen> {
                 width: 22,
                 height: 22,
                 colorFilter: const ColorFilter.mode(
-                  _brandBlueDark,
+                  Colors.white,
                   BlendMode.srcIn,
                 ),
               ),
@@ -295,7 +311,7 @@ class _LockScreenState extends State<LockScreen> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: _brandBlueDark,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 2),
@@ -305,7 +321,7 @@ class _LockScreenState extends State<LockScreen> {
                 style: TextStyle(
                   fontSize: 11.5,
                   height: 1.4,
-                  color: _brandBlueDark.withValues(alpha: 0.78),
+                  color: Colors.white.withValues(alpha: 0.8),
                 ),
               ),
             ],
@@ -366,7 +382,7 @@ class _LockScreenState extends State<LockScreen> {
                       ),
                       const SizedBox(height: 18),
                       Text(
-                        _isSetup ? '建立你的 SecureManage' : '解除鎖定並進入 SecureManage',
+                        _isSetup ? '建立你的 Nook' : '解除鎖定並進入 Nook',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 21,

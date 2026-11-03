@@ -1,4 +1,4 @@
-# SecureManage
+# Nook
 
 本機用的機密資料管理工具。管三類東西：
 
@@ -9,6 +9,22 @@
 | **主機 / VM** | 位址、port、登入帳號、跳板機、sudo 密碼、環境變數，可引用某把金鑰 |
 
 macOS app（Flutter），同一份程式碼之後可以編成 iOS / Android。
+
+> 這個 app 原本叫 SecureManage，後來改名為 Nook，bundle identifier 也一併從
+> `tw.com.jetopto.securemanage` 換成 `tw.com.jetopto.nook`。
+>
+> 沙盒 app 的資料目錄是跟著 bundle identifier 走的，所以換了之後新版會看到一個
+> 空的保險庫 —— 舊資料還在舊容器裡，只是 app 找不到。搬過去用：
+>
+> ```bash
+> ./scripts/migrate_container.sh
+> ```
+>
+> 那支是「複製」不是「移動」，舊容器原封不動留著當備份，確認新的能解鎖之後
+> 再自己刪。
+>
+> 有一樣東西**沒有**跟著改：加密檔的檔頭 magic 仍然是 `SM01`。那四個位元組寫在
+> 每個 `.item` 檔的最前面，改了既有項目就全部解不開。
 **沒有任何資料離開這台機器**，Release 版的 entitlements 裡沒有任何網路權限。
 
 ---
@@ -18,7 +34,7 @@ macOS app（Flutter），同一份程式碼之後可以編成 iOS / Android。
 需要 Flutter（開發時用的是 3.41.9 stable）與 Xcode。
 
 ```bash
-cd ~/Projects/Private/SecureManage && flutter pub get
+cd ~/Projects/Private/Nook && flutter pub get
 ```
 
 跑起來看看：
@@ -119,7 +135,7 @@ ChaCha20-Poly1305 帶認證標籤，檔案被改過會驗證失敗，而不是�
 對一個把主金鑰放在記憶體裡的 app 來說不該留著。簽完只剩 `com.apple.security.app-sandbox`。
 
 ```bash
-codesign -d --entitlements - /Applications/SecureManage.app
+codesign -d --entitlements - /Applications/Nook.app
 ```
 
 ### 刻意沒做的事
@@ -184,7 +200,7 @@ Team ID 上。現在是 ad-hoc 簽章，刻意不綁任何團隊帳號。
 app 是沙盒化的，所以資料在 container 裡：
 
 ```
-~/Library/Containers/tw.com.jetopto.securemanage/Data/Library/Application Support/tw.com.jetopto.securemanage/vault/
+~/Library/Containers/tw.com.jetopto.nook/Data/Library/Application Support/tw.com.jetopto.nook/vault/
 ```
 
 這串很長，所以「設定」裡有顯示完整路徑和一顆「複製路徑」。
@@ -198,7 +214,7 @@ app 是沙盒化的，所以資料在 container 裡：
 把整個 `vault/` 資料夾複製走就是完整備份。
 
 ```bash
-VAULT=~/Library/Containers/tw.com.jetopto.securemanage/Data/Library/Application\ Support/tw.com.jetopto.securemanage/vault
+VAULT=~/Library/Containers/tw.com.jetopto.nook/Data/Library/Application\ Support/tw.com.jetopto.nook/vault
 ```
 
 ```bash
@@ -254,7 +270,7 @@ flutter test
 
 - `test/vault_test.dart` — 加密與儲存層。建立／寫入／重開解鎖／讀回、密碼錯打不開、落地檔無明文、檔案被竄改會擋下、換主密碼、Touch ID 的 DEK 解鎖、Argon2id 耗時
 - `test/ui_flow_test.dart` — 驅動真實 UI 跑完整流程：建立保險庫 → 新增主機 → 上鎖 → 用錯密碼 → 用對密碼 → 讀回，以及閒置自動上鎖與密碼顯示切換
-- `test/idle_activity_test.dart` — 掛真正的 `SecureManageApp`，確認鍵盤與對話框裡的操作
+- `test/idle_activity_test.dart` — 掛真正的 `NookApp`，確認鍵盤與對話框裡的操作
   都算活動、切換 app 預設不會上鎖、以及上鎖時對話框會被收掉。這幾個測試一定要用真的 app，
   自己兜簡化的 harness 會測到假的接線
 
@@ -277,7 +293,7 @@ flutter test tool/render_screens.dart --update-goldens
 
 **所有測試一律使用程式裡捏造的假資料**（`198.51.100.x`、`example.test`、`fake-*`），不碰任何真實憑證。
 
-### Launchpad 出現重複的 SecureManage
+### Launchpad 出現重複的 Nook
 
 `build/` 裡編出來的 `.app` 會被 Spotlight 索引，於是 Launchpad 會同時列出
 `/Applications` 那個和建置產物，看起來像裝了好幾份。
@@ -329,7 +345,7 @@ icon 是用 CoreGraphics 直接畫出來的，沒有依賴任何設計工具，�
 ```
 
 這支會重算所有尺寸、放進 `macos/Runner/Assets.xcassets/AppIcon.appiconset/`，
-並產生一份 `design/out/SecureManage.icns`（給不經過 Xcode 打包的場合用，例如做 DMG）。
+並產生一份 `design/out/Nook.icns`（給不經過 Xcode 打包的場合用，例如做 DMG）。
 
 造型與顏色都在 [design/render_icon.swift](design/render_icon.swift)：
 深藍 squircle 底板加白色盾牌，盾牌上挖一個鑰匙孔。盾牌呼應 app 裡的鎖定圖示，

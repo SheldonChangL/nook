@@ -70,7 +70,7 @@ class VaultCrypto {
     }
     for (var i = 0; i < magic.length; i++) {
       if (sealed[i] != magic[i]) {
-        throw const VaultOpenException('不是 SecureManage 的加密內容');
+        throw const VaultOpenException('不是 Nook 的加密內容');
       }
     }
     final box = SecretBox(

@@ -55,6 +55,7 @@ abstract class VaultItem {
     this.notes = '',
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.lastAccessedAt,
   })  : id = id ?? _uuid.v4(),
         tags = tags ?? <String>[],
         createdAt = createdAt ?? DateTime.now(),
@@ -66,6 +67,10 @@ abstract class VaultItem {
   String notes;
   final DateTime createdAt;
   DateTime updatedAt;
+
+  /// 上次真的把這筆的機密複製或揭露出來的時間。沒碰過就是 null。
+  /// 跟 updatedAt 分開：看一眼不算改過它。
+  DateTime? lastAccessedAt;
 
   ItemKind get kind;
 
@@ -83,6 +88,7 @@ abstract class VaultItem {
         'notes': notes,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
+        'lastAccessedAt': lastAccessedAt?.toIso8601String(),
         ...payload(),
       };
 
@@ -106,6 +112,7 @@ class SecureKeyItem extends VaultItem {
     super.notes,
     super.createdAt,
     super.updatedAt,
+    super.lastAccessedAt,
     this.keyKind = KeyKind.sshPrivateKey,
     this.algorithm = '',
     this.secret = '',
@@ -149,6 +156,9 @@ class SecureKeyItem extends VaultItem {
         notes: json['notes'] as String? ?? '',
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
+        lastAccessedAt: json['lastAccessedAt'] == null
+            ? null
+            : DateTime.parse(json['lastAccessedAt'] as String),
         keyKind: KeyKind.fromWire(json['keyKind'] as String? ?? ''),
         algorithm: json['algorithm'] as String? ?? '',
         secret: json['secret'] as String? ?? '',
@@ -164,6 +174,7 @@ class AccountItem extends VaultItem {
     super.notes,
     super.createdAt,
     super.updatedAt,
+    super.lastAccessedAt,
     this.url = '',
     this.username = '',
     this.password = '',
@@ -197,6 +208,9 @@ class AccountItem extends VaultItem {
         notes: json['notes'] as String? ?? '',
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
+        lastAccessedAt: json['lastAccessedAt'] == null
+            ? null
+            : DateTime.parse(json['lastAccessedAt'] as String),
         url: json['url'] as String? ?? '',
         username: json['username'] as String? ?? '',
         password: json['password'] as String? ?? '',
@@ -211,6 +225,7 @@ class HostItem extends VaultItem {
     super.notes,
     super.createdAt,
     super.updatedAt,
+    super.lastAccessedAt,
     this.hostname = '',
     this.port = 22,
     this.username = '',
@@ -276,6 +291,9 @@ class HostItem extends VaultItem {
         notes: json['notes'] as String? ?? '',
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
+        lastAccessedAt: json['lastAccessedAt'] == null
+            ? null
+            : DateTime.parse(json['lastAccessedAt'] as String),
         hostname: json['hostname'] as String? ?? '',
         port: json['port'] as int? ?? 22,
         username: json['username'] as String? ?? '',

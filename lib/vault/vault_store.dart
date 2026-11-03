@@ -155,9 +155,11 @@ class VaultStore {
 
   // ---------------------------------------------------------------- 項目
 
-  Future<void> put(VaultItem item) async {
+  /// [bumpUpdated] 為 false 時不動 updatedAt —— 記錄「被存取過」用的，
+  /// 看一眼不該讓它在清單裡跳到最前面。
+  Future<void> put(VaultItem item, {bool bumpUpdated = true}) async {
     _requireUnlocked();
-    item.updatedAt = DateTime.now();
+    if (bumpUpdated) item.updatedAt = DateTime.now();
     await _itemsDir.create(recursive: true);
     final sealed = await VaultCrypto.seal(
       _dek!,

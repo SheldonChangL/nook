@@ -113,7 +113,7 @@ void main() {
 
     // --- 建立保險庫 -------------------------------------------------
     expect(state.phase, VaultPhase.needsSetup);
-    expect(find.text('建立你的 SecureManage'), findsOneWidget);
+    expect(find.text('建立你的 Nook'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(0), masterPassword);
     await tester.enterText(find.byType(TextField).at(1), masterPassword);
@@ -127,7 +127,7 @@ void main() {
     expect(find.text('保險庫還是空的'), findsOneWidget);
 
     // --- 新增一台主機 -----------------------------------------------
-    await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
+    await tester.tap(find.widgetWithText(FilledButton, '新增'));
     await grind(tester);
     await tester.tap(find.widgetWithText(MenuItemButton, '主機 / VM'));
     await grind(tester);

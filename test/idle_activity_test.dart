@@ -18,7 +18,7 @@ import 'package:securemanage/vault/vault_store.dart';
 ///      連在對話框裡點擊都不會經過它
 ///   3. 上鎖之後對話框還留在畫面上，繼續顯示已經展開的機密
 ///
-/// 所以這裡一定要掛真正的 SecureManageApp，不能自己兜一個簡化的 harness，
+/// 所以這裡一定要掛真正的 NookApp，不能自己兜一個簡化的 harness，
 /// 不然測到的是假的接線。
 const masterPassword = 'fake-master-pw-for-tests-2026!';
 
@@ -73,7 +73,7 @@ void main() {
     final state =
         AppState(store: VaultStore(tmp, kdfFactory: KdfParams.weakForTests), biometrics: _NoBiometrics());
     active = state;
-    await tester.pumpWidget(SecureManageApp(state: state));
+    await tester.pumpWidget(NookApp(state: state));
     await grind(tester);
 
     await tester.enterText(find.byType(TextField).first, masterPassword);
@@ -90,7 +90,7 @@ void main() {
   }
 
   Future<void> openEditor(WidgetTester tester) async {
-    await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
+    await tester.tap(find.widgetWithText(FilledButton, '新增'));
     await grind(tester);
     await tester.tap(find.widgetWithText(MenuItemButton, '主機 / VM'));
     await grind(tester);

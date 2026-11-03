@@ -20,7 +20,7 @@ done
 
 echo "做 .icns…"
 # .icns 給「不是透過 Xcode 打包」的場合用，例如直接發一個 app 或做 DMG。
-TMP=$(mktemp -d)/SecureManage.iconset
+TMP=$(mktemp -d)/Nook.iconset
 mkdir -p "$TMP"
 cp "$OUT/app_icon_16.png"   "$TMP/icon_16x16.png"
 cp "$OUT/app_icon_32.png"   "$TMP/icon_16x16@2x.png"
@@ -32,7 +32,7 @@ cp "$OUT/app_icon_256.png"  "$TMP/icon_256x256.png"
 cp "$OUT/app_icon_512.png"  "$TMP/icon_256x256@2x.png"
 cp "$OUT/app_icon_512.png"  "$TMP/icon_512x512.png"
 cp "$OUT/app_icon_1024.png" "$TMP/icon_512x512@2x.png"
-iconutil -c icns "$TMP" -o "$OUT/SecureManage.icns"
+iconutil -c icns "$TMP" -o "$OUT/Nook.icns"
 rm -rf "$(dirname "$TMP")"
 
 echo "好了："

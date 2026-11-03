@@ -30,7 +30,8 @@ class DetailPanel extends StatelessWidget {
   final void Function(VaultItem) onOpenRef;
 
   void _copy(BuildContext context, String value, String label) {
-    state.copySecret(value, label: label);
+    // 帶上 item，這樣「最近存取」才有東西可算。
+    state.copySecret(value, label: label, item: item);
   }
 
   @override

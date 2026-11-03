@@ -8,21 +8,21 @@ import 'ui/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const SecureManageApp());
+  runApp(const NookApp());
 }
 
-class SecureManageApp extends StatefulWidget {
-  const SecureManageApp({super.key, this.state});
+class NookApp extends StatefulWidget {
+  const NookApp({super.key, this.state});
 
   /// 測試用：讓測試可以塞一個指向暫存目錄、不碰 Touch ID 的狀態進來。
   /// 正式執行時是 null，自己建一個。
   final AppState? state;
 
   @override
-  State<SecureManageApp> createState() => _SecureManageAppState();
+  State<NookApp> createState() => _NookAppState();
 }
 
-class _SecureManageAppState extends State<SecureManageApp>
+class _NookAppState extends State<NookApp>
     with WidgetsBindingObserver {
   late final AppState _state = widget.state ?? AppState();
   final _navigator = GlobalKey<NavigatorState>();
@@ -76,7 +76,7 @@ class _SecureManageAppState extends State<SecureManageApp>
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SecureManage',
+      title: 'Nook',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigator,
       theme: AppTheme.light(),

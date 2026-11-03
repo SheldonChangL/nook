@@ -96,3 +96,22 @@ TextStyle monoStyle({double fontSize = 13, double? height, Color? color}) =>
       height: height,
       color: color,
     );
+
+/// SecureManage_UI_Assets/palette.json 的色票。鎖定畫面與主畫面共用。
+///
+/// 這些素材是固定的淺色設計，所以用到它們的畫面不跟系統深色模式走。
+const brandBlueDark = Color(0xFF0D5C96);
+const brandBlue = Color(0xFF1878BE);
+const brandBlueBright = Color(0xFF2F8EDB);
+const panelBlueLight = Color(0xFFDDF1FF);
+const panelBlueMid = Color(0xFF9ED1FA);
+const brandSurface = Color(0xFFFCFCFB);
+const brandSurfaceAlt = Color(0xFFF3F6FA);
+const brandTextPrimary = Color(0xFF17212B);
+const brandTextSecondary = Color(0xFF66707A);
+const brandBorder = Color(0xFFD7DEE7);
+const brandGreen = Color(0xFF1D9E75);
+const brandGreenBg = Color(0xFFE1F5EE);
+
+/// 素材資料夾。檔名沿用使用者給的那包，沒有跟著 app 改名。
+const brandAssets = 'SecureManage_UI_Assets';

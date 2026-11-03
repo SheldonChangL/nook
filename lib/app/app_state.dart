@@ -242,9 +242,19 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> copySecret(String value, {required String label}) async {
+  Future<void> copySecret(String value,
+      {required String label, VaultItem? item}) async {
     touch();
     await clipboard.copy(value, label: label);
+    if (item != null) await markAccessed(item);
+    notifyListeners();
+  }
+
+  /// 記錄這筆被真的用過。不動 updatedAt，所以清單排序不會因為看一眼就亂跳。
+  Future<void> markAccessed(VaultItem item) async {
+    if (!store.isUnlocked) return;
+    item.lastAccessedAt = DateTime.now();
+    await store.put(item, bumpUpdated: false);
     notifyListeners();
   }
 

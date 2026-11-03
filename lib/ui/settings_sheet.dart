@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/app_state.dart';
-import 'theme.dart';
 import 'widgets/fields.dart';
 
 Future<void> showSettingsSheet(BuildContext context,
@@ -25,6 +26,24 @@ class _SettingsSheet extends StatefulWidget {
 
 class _SettingsSheetState extends State<_SettingsSheet> {
   String? _message;
+  bool _pathCopied = false;
+  Timer? _copiedReset;
+
+  /// 路徑不是機密，所以不走 ClipboardGuard —— 不需要 30 秒後被清掉。
+  Future<void> _copyVaultPath() async {
+    await Clipboard.setData(ClipboardData(text: state.vaultPath));
+    setState(() => _pathCopied = true);
+    _copiedReset?.cancel();
+    _copiedReset = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _pathCopied = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _copiedReset?.cancel();
+    super.dispose();
+  }
 
   AppState get state => widget.state;
 
@@ -150,23 +169,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
                     const SizedBox(height: 20),
                     _group('資料'),
-                    Text('加密檔位置',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onSurfaceVariant)),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      state.vaultPath,
-                      style: monoStyle(fontSize: 11.5, height: 1.5),
-                    ),
-                    const SizedBox(height: 8),
+                    // 路徑又長又深（沙盒容器底下），攤在設定頁上只是噪音。
+                    // 需要的時候複製走就好。
                     Row(children: [
+                      Expanded(
+                        child: Text('加密檔位置',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: scheme.onSurface)),
+                      ),
                       OutlinedButton.icon(
-                        onPressed: () => Clipboard.setData(
-                            ClipboardData(text: state.vaultPath)),
-                        icon: const Icon(Icons.copy_outlined, size: 14),
-                        label: const Text('複製路徑',
-                            style: TextStyle(fontSize: 12)),
+                        onPressed: _copyVaultPath,
+                        icon: Icon(
+                            _pathCopied
+                                ? Icons.check
+                                : Icons.copy_outlined,
+                            size: 14),
+                        label: Text(_pathCopied ? '已複製' : '複製路徑',
+                            style: const TextStyle(fontSize: 12)),
                       ),
                     ]),
                     const SizedBox(height: 10),

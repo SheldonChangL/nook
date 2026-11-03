@@ -2,9 +2,9 @@
 import Foundation
 import ImageIO
 
-let blueTop = CGColor(red: 47 / 255, green: 142 / 255, blue: 219 / 255, alpha: 1)
-let blueBottom = CGColor(red: 13 / 255, green: 92 / 255, blue: 150 / 255, alpha: 1)
-let doorWhite = CGColor(red: 245 / 255, green: 248 / 255, blue: 250 / 255, alpha: 1)
+let blueTop = CGColor(red: 38 / 255, green: 126 / 255, blue: 190 / 255, alpha: 1)
+let blueBottom = CGColor(red: 5 / 255, green: 46 / 255, blue: 78 / 255, alpha: 1)
+let frameWhite = CGColor(red: 232 / 255, green: 245 / 255, blue: 255 / 255, alpha: 1)
 let white = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
 
 func squirclePath(in rect: CGRect, n: Double = 5, steps: Int = 720) -> CGPath {
@@ -33,15 +33,21 @@ func renderIcon(size: CGFloat) -> CGImage? {
     ctx.saveGState(); ctx.addPath(squirclePath(in: plate)); ctx.clip()
     let gradient = CGGradient(colorsSpace: cs, colors: [blueTop, blueBottom] as CFArray, locations: [0, 1])!
     ctx.drawLinearGradient(gradient, start: CGPoint(x: plate.midX, y: plate.maxY), end: CGPoint(x: plate.midX, y: plate.minY), options: []); ctx.restoreGState()
-    let doorW = plate.width * 0.56, door = CGRect(x: plate.midX - doorW / 2, y: plate.midY - doorW / 2, width: doorW, height: doorW)
-    let dial = CGRect(x: door.midX - doorW * 0.26, y: door.midY - doorW * 0.26, width: doorW * 0.52, height: doorW * 0.52)
-    let handle = CGRect(x: door.maxX - doorW * 0.115, y: door.midY - doorW * 0.105, width: doorW * 0.06, height: doorW * 0.21)
-    let cutout = CGMutablePath(); cutout.addPath(roundedRect(door, radius: doorW * 0.12)); cutout.addEllipse(in: dial); cutout.addPath(roundedRect(handle, radius: handle.width / 2))
-    ctx.setFillColor(doorWhite); ctx.addPath(cutout); ctx.drawPath(using: .eoFill)
-    let center = CGPoint(x: dial.midX, y: dial.midY), tickRadius = dial.width * 0.39, tickLength = max(size * 0.035, dial.width * 0.13)
-    ctx.setStrokeColor(white); ctx.setLineWidth(max(size * 0.025, 1.3)); ctx.setLineCap(.round)
-    for i in 0..<8 { let a = CGFloat(i) * .pi / 4; let dx = cos(a), dy = sin(a); ctx.move(to: CGPoint(x: center.x + dx * (tickRadius - tickLength), y: center.y + dy * (tickRadius - tickLength))); ctx.addLine(to: CGPoint(x: center.x + dx * tickRadius, y: center.y + dy * tickRadius)); ctx.strokePath() }
-    ctx.setFillColor(white); ctx.fillEllipse(in: CGRect(x: center.x - doorW * 0.065, y: center.y - doorW * 0.065, width: doorW * 0.13, height: doorW * 0.13))
+    // Nook 是私密的小角落：用拱門與鎖孔，而不是保險箱轉盤。
+    // 後者在 Dock 的小尺寸下會讀成風扇。
+    let outerW = plate.width * 0.56, outerH = plate.height * 0.62
+    let outer = CGRect(x: plate.midX - outerW / 2, y: plate.midY - outerH * 0.43, width: outerW, height: outerH)
+    let frame = CGPath(roundedRect: outer, cornerWidth: outerW * 0.28, cornerHeight: outerW * 0.28, transform: nil)
+    ctx.setFillColor(frameWhite); ctx.addPath(frame); ctx.fillPath()
+    let innerInset = outerW * 0.105, inner = outer.insetBy(dx: innerInset, dy: innerInset)
+    let door = CGPath(roundedRect: inner, cornerWidth: inner.width * 0.28, cornerHeight: inner.width * 0.28, transform: nil)
+    ctx.setFillColor(blueBottom); ctx.addPath(door); ctx.fillPath()
+    ctx.setStrokeColor(CGColor(red: 143 / 255, green: 210 / 255, blue: 1, alpha: 0.65)); ctx.setLineWidth(max(size * 0.011, 1)); ctx.addPath(door); ctx.strokePath()
+    let keyCenter = CGPoint(x: inner.midX, y: inner.midY - inner.height * 0.04)
+    let keyCircle = CGRect(x: keyCenter.x - inner.width * 0.13, y: keyCenter.y - inner.width * 0.13, width: inner.width * 0.26, height: inner.width * 0.26)
+    ctx.setFillColor(white); ctx.fillEllipse(in: keyCircle)
+    ctx.setFillColor(white); ctx.addPath(roundedRect(CGRect(x: keyCenter.x - inner.width * 0.045, y: keyCenter.y, width: inner.width * 0.09, height: inner.height * 0.20), radius: inner.width * 0.045)); ctx.fillPath()
+    ctx.setFillColor(blueBottom); ctx.fillEllipse(in: CGRect(x: keyCenter.x - inner.width * 0.035, y: keyCenter.y - inner.width * 0.035, width: inner.width * 0.07, height: inner.width * 0.07))
     return ctx.makeImage()
 }
 

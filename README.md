@@ -211,10 +211,15 @@ flutter test
 把各畫面算成 PNG 來人眼檢查版面：
 
 ```bash
-flutter test test/render_screens_test.dart --update-goldens
+flutter test tool/render_screens.dart --update-goldens
 ```
 
-輸出在 `test/goldens/`。這些 PNG 是給人看的，不是拿來比對的回歸基準，改版面時直接重算即可。注意測試算圖器沒有 Menlo 等字型，等寬欄位會顯示成黑塊，那是算圖環境的限制，不是 app 的問題。
+輸出在 `design/screens/`。
+
+這支刻意放在 `test/` 外面，所以 `flutter test` 不會跑到它。原因是詳情面板會印出建立與更新時間，
+每跑一次都不一樣，當成回歸基準比對一定會壞 —— 這些圖是給人看的，不是斷言。
+
+注意算圖器沒有 Menlo 與圖示字型，等寬欄位會變黑塊、圖示會變空框，那是算圖環境的限制，不是 app 的問題。
 
 **所有測試一律使用程式裡捏造的假資料**（`198.51.100.x`、`example.test`、`fake-*`），不碰任何真實憑證。
 

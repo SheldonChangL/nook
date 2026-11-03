@@ -1,6 +1,3 @@
-@Tags(['render'])
-library;
-
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,8 +11,12 @@ import 'package:securemanage/ui/theme.dart';
 import 'package:securemanage/vault/models.dart';
 import 'package:securemanage/vault/vault_store.dart';
 
-/// 把各個畫面算成 PNG，用來人眼檢查版面。
-/// 跑法：flutter test test/render_screens_test.dart --update-goldens
+/// 把各個畫面算成 PNG，用來人眼檢查版面。輸出在 design/screens/。
+///
+/// 跑法：flutter test tool/render_screens.dart --update-goldens
+///
+/// 刻意放在 test/ 外面：詳情面板會印出建立與更新時間，每跑一次都不一樣，
+/// 當成回歸基準比對一定會壞。這些圖是給人看的，不是斷言。
 ///
 /// 測試用的預設字型是方框字，中文會變成豆腐，所以借系統的 Arial Unicode 來算。
 /// 全部都是假資料。
@@ -123,13 +124,13 @@ void main() {
     await grind(tester);
 
     await expectLater(
-        find.byType(LockScreen), matchesGoldenFile('goldens/01_lock.png'));
+        find.byType(LockScreen), matchesGoldenFile('../design/screens/01_lock.png'));
   });
 
   testWidgets('算出主畫面清單', (tester) async {
     await bootUnlocked(tester);
     await expectLater(
-        find.byType(HomeScreen), matchesGoldenFile('goldens/02_list.png'));
+        find.byType(HomeScreen), matchesGoldenFile('../design/screens/02_list.png'));
   });
 
   testWidgets('算出詳情面板', (tester) async {
@@ -137,7 +138,7 @@ void main() {
     await tester.tap(find.text('demo-box').first);
     await grind(tester);
     await expectLater(
-        find.byType(HomeScreen), matchesGoldenFile('goldens/03_detail.png'));
+        find.byType(HomeScreen), matchesGoldenFile('../design/screens/03_detail.png'));
   });
 
   testWidgets('算出 ⌘K 面板', (tester) async {
@@ -149,7 +150,7 @@ void main() {
     await tester.enterText(find.byType(TextField).last, 'box');
     await grind(tester);
     await expectLater(
-        find.byType(MaterialApp), matchesGoldenFile('goldens/04_palette.png'));
+        find.byType(MaterialApp), matchesGoldenFile('../design/screens/04_palette.png'));
   });
 
   testWidgets('算出新增主機表單', (tester) async {
@@ -159,7 +160,7 @@ void main() {
     await tester.tap(find.widgetWithText(MenuItemButton, '主機 / VM'));
     await grind(tester);
     await expectLater(
-        find.byType(MaterialApp), matchesGoldenFile('goldens/05_editor.png'));
+        find.byType(MaterialApp), matchesGoldenFile('../design/screens/05_editor.png'));
   });
 }
 

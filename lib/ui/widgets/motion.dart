@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'fields.dart';
 
 /// 素材庫 #125「區塊依序輕輕浮現」。解鎖後列表一項一項浮上來。
 class RiseIn extends StatefulWidget {
@@ -207,6 +208,9 @@ class _RisingLabelFieldState extends State<RisingLabelField> {
   final _focus = FocusNode();
   bool _raised = false;
 
+  /// 遮起來的欄位預設維持遮住，要按眼睛才顯示。
+  bool _revealed = false;
+
   @override
   void initState() {
     super.initState();
@@ -257,14 +261,14 @@ class _RisingLabelFieldState extends State<RisingLabelField> {
               ),
               Positioned(
                 left: 0,
-                right: 0,
+                right: widget.obscure ? 32 : 0,
                 bottom: 0,
                 height: 26,
                 child: TextField(
                   controller: widget.controller,
                   focusNode: _focus,
                   autofocus: widget.autofocus,
-                  obscureText: widget.obscure,
+                  obscureText: widget.obscure && !_revealed,
                   onSubmitted: widget.onSubmitted,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
@@ -275,6 +279,16 @@ class _RisingLabelFieldState extends State<RisingLabelField> {
                   ),
                 ),
               ),
+              if (widget.obscure)
+                Positioned(
+                  right: 0,
+                  bottom: -3,
+                  child: RevealToggle(
+                    revealed: _revealed,
+                    // 不搶走輸入焦點，按完還能繼續打。
+                    onToggle: () => setState(() => _revealed = !_revealed),
+                  ),
+                ),
             ],
           ),
         ),

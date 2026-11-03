@@ -402,3 +402,85 @@ class _PoppingChipState extends State<_PoppingChip>
     );
   }
 }
+
+/// 密碼欄位旁邊的眼睛。刻意不讓它搶走輸入焦點，按完還能接著打。
+class RevealToggle extends StatelessWidget {
+  const RevealToggle({
+    super.key,
+    required this.revealed,
+    required this.onToggle,
+  });
+
+  final bool revealed;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ExcludeFocus(
+      child: IconButton(
+        icon: Icon(
+            revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+            size: 17),
+        color: scheme.onSurfaceVariant,
+        tooltip: revealed ? '隱藏' : '顯示',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+        visualDensity: VisualDensity.compact,
+        onPressed: onToggle,
+      ),
+    );
+  }
+}
+
+/// 一般的密碼輸入欄位，附顯示切換。
+///
+/// 輸入時看得到自己打了什麼跟「列表上不該出現明文」是兩回事：前者是你主動
+/// 按下去的，後者是沒人要求就攤開。所以這裡給切換，列表那邊不給。
+class PasswordField extends StatefulWidget {
+  const PasswordField({
+    super.key,
+    required this.controller,
+    this.label,
+    this.hint,
+    this.autofocus = false,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String? label;
+  final String? hint;
+  final bool autofocus;
+  final VoidCallback? onChanged;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<PasswordField> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      obscureText: !_revealed,
+      autofocus: widget.autofocus,
+      onChanged: (_) => widget.onChanged?.call(),
+      onSubmitted: widget.onSubmitted,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(
+        labelText: widget.label,
+        hintText: widget.hint,
+        suffixIcon: RevealToggle(
+          revealed: _revealed,
+          onToggle: () => setState(() => _revealed = !_revealed),
+        ),
+        suffixIconConstraints:
+            const BoxConstraints(minWidth: 38, minHeight: 30),
+      ),
+    );
+  }
+}

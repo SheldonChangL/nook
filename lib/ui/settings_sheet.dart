@@ -258,18 +258,16 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
+            PasswordField(
               controller: _old,
-              obscureText: true,
               autofocus: true,
-              decoration: const InputDecoration(labelText: '目前的主密碼'),
+              label: '目前的主密碼',
             ),
             const SizedBox(height: 12),
-            TextField(
+            PasswordField(
               controller: _new,
-              obscureText: true,
-              onChanged: (_) => setState(() => _error = null),
-              decoration: const InputDecoration(labelText: '新主密碼'),
+              label: '新主密碼',
+              onChanged: () => setState(() => _error = null),
             ),
             const SizedBox(height: 10),
             AnimatedBuilder(
@@ -277,11 +275,10 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               builder: (context, _) => StrengthMeter(password: _new.text),
             ),
             const SizedBox(height: 12),
-            TextField(
+            PasswordField(
               controller: _confirm,
-              obscureText: true,
+              label: '再打一次',
               onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(labelText: '再打一次'),
             ),
             if (_error != null)
               Padding(

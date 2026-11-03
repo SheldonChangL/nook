@@ -48,6 +48,10 @@ class _ItemEditorState extends State<_ItemEditor> {
   String? _keyRef;
   final _env = <EnvVar>[];
 
+  /// 哪幾條機密環境變數目前被按成顯示。用物件本身當 key，刪掉某一條時
+  /// 不會讓其他條的狀態跟著位移。
+  final _revealedEnv = <EnvVar>{};
+
   // 金鑰
   KeyKind _keyKind = KeyKind.sshPrivateKey;
   final _algorithm = TextEditingController();
@@ -348,9 +352,21 @@ class _ItemEditorState extends State<_ItemEditor> {
           child: TextFormField(
             initialValue: env.value,
             onChanged: (v) => env.value = v,
-            obscureText: env.secret,
+            obscureText: env.secret && !_revealedEnv.contains(env),
             style: monoStyle(),
-            decoration: const InputDecoration(hintText: 'value'),
+            decoration: InputDecoration(
+              hintText: 'value',
+              suffixIcon: env.secret
+                  ? RevealToggle(
+                      revealed: _revealedEnv.contains(env),
+                      onToggle: () => setState(() => _revealedEnv.contains(env)
+                          ? _revealedEnv.remove(env)
+                          : _revealedEnv.add(env)),
+                    )
+                  : null,
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 38, minHeight: 30),
+            ),
           ),
         ),
         const SizedBox(width: 4),
@@ -392,17 +408,19 @@ class _ItemEditorState extends State<_ItemEditor> {
       children: [
         _label(label),
         const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          obscureText: obscure,
-          maxLines: obscure ? 1 : maxLines,
-          onChanged: (_) => onChanged?.call(),
-          style: TextStyle(
-              fontSize: 13,
-              fontFamily: monospace ? monoFamily : null,
-              fontFamilyFallback: monospace ? monoFallback : null),
-          decoration: InputDecoration(errorText: error),
-        ),
+        if (obscure)
+          PasswordField(controller: controller, onChanged: onChanged)
+        else
+          TextField(
+            controller: controller,
+            maxLines: maxLines,
+            onChanged: (_) => onChanged?.call(),
+            style: TextStyle(
+                fontSize: 13,
+                fontFamily: monospace ? monoFamily : null,
+                fontFamilyFallback: monospace ? monoFallback : null),
+            decoration: InputDecoration(errorText: error),
+          ),
       ],
     );
   }

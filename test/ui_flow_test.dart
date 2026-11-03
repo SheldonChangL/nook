@@ -221,11 +221,35 @@ void main() {
     expect(find.text('fake-account-pw'), findsNothing);
   });
 
+  testWidgets('主密碼欄位可以按眼睛切換顯示', (tester) async {
+    final state = await boot(tester);
+    expect(state.phase, VaultPhase.needsSetup);
+
+    TextField firstField() =>
+        tester.widget<TextField>(find.byType(TextField).first);
+
+    expect(firstField().obscureText, isTrue, reason: '預設要遮起來');
+
+    await tester.enterText(find.byType(TextField).first, 'something');
+    await grind(tester);
+
+    await tester.tap(find.byTooltip('顯示').first);
+    await grind(tester);
+    expect(firstField().obscureText, isFalse);
+
+    await tester.tap(find.byTooltip('隱藏').first);
+    await grind(tester);
+    expect(firstField().obscureText, isTrue);
+
+    // 切換顯示不該把輸入的內容弄掉。
+    expect(firstField().controller?.text, 'something');
+  });
+
   testWidgets('閒置到時間會自動上鎖', (tester) async {
     await seedVault(tester, (seed) async {
       await seed.put(AccountItem(name: '假帳號', password: 'fake-pw'));
-      // 把自動上鎖調成 2 秒，測試才跑得動。
-      seed.settings.autoLockSeconds = 2;
+      // 把自動上鎖調成 1 秒，測試才跑得動。
+      seed.settings.autoLockSeconds = 1;
       await seed.saveSettings();
     });
 
@@ -240,10 +264,12 @@ void main() {
     expect(find.text('假帳號'), findsOneWidget);
 
     // 自動上鎖判斷的是真實經過時間（機器睡著也要算），所以要真的等過去，
-    // 再推進假時鐘讓週期 timer 開火。
+    // 再推進假時鐘讓週期 timer 開火。等待時間刻意拉得比門檻寬很多：那個週期
+    // timer 落在真實還是假的時鐘，取決於解鎖是在 runAsync 窗口內還是外完成，
+    // 兩種情形都要能過。
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 2600)));
-    await grind(tester, rounds: 12, step: const Duration(milliseconds: 500));
+        () => Future<void>.delayed(const Duration(milliseconds: 3000)));
+    await grind(tester, rounds: 16, step: const Duration(milliseconds: 500));
 
     expect(state.phase, VaultPhase.locked);
     expect(find.text('假帳號'), findsNothing);

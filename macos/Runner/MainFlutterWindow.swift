@@ -46,6 +46,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     orderOut(nil)
+    // 藏起來的時候連 Dock 圖示一起收掉，只留狀態列那個鎖頭；AppDelegate 開回來時再放回 Dock。
+    NSApp.setActivationPolicy(.accessory)
     return false
   }
 

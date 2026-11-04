@@ -78,13 +78,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   @objc func showMainWindow() {
-    guard let window = mainFlutterWindow else { return }
-    // 關視窗時把 Dock 圖示收掉了（見 MainFlutterWindow），開回來先放回 Dock 再帶到最前面。
-    // 切回 regular 之後同一個 run loop 內 activate 不一定生效，所以延後一拍。
-    NSApp.setActivationPolicy(.regular)
-    DispatchQueue.main.async {
-      window.makeKeyAndOrderFront(nil)
-      NSApp.activate(ignoringOtherApps: true)
-    }
+    guard let window = mainFlutterWindow as? MainFlutterWindow else { return }
+    window.showFromStatusBar()
   }
 }

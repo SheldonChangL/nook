@@ -48,6 +48,11 @@ class AppState extends ChangeNotifier {
   bool biometricArmed = false;
   bool darkAppearance = true;
 
+  /// 視窗是不是看得到。收進狀態列時是 false，由 main.dart 從原生端同步。
+  /// 視窗藏著的時候不該跳 Touch ID 的系統對話框，等開回來再問。
+  bool windowVisible = true;
+  bool _autoUnlockPending = false;
+
   Timer? _idleTimer;
   DateTime _lastActivity = DateTime.now();
 
@@ -104,6 +109,26 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  void setWindowVisible(bool visible) {
+    if (windowVisible == visible) return;
+    windowVisible = visible;
+    if (visible && _autoUnlockPending) {
+      _autoUnlockPending = false;
+      unawaited(unlockWithBiometrics());
+    }
+  }
+
+  /// 鎖定畫面出現時先用 Touch ID 問一次。視窗藏在狀態列時先記著，
+  /// 開回來的那一刻再問，不然系統對話框會無緣無故跳出來。
+  void autoUnlockWithBiometrics() {
+    if (phase != VaultPhase.locked || !biometricArmed) return;
+    if (!windowVisible) {
+      _autoUnlockPending = true;
+      return;
+    }
+    unawaited(unlockWithBiometrics());
+  }
+
   /// Touch ID 解鎖。沒開、沒通過、或 Keychain 那份跟保險庫對不上，都回 false
   /// 讓畫面退回主密碼。
   Future<bool> unlockWithBiometrics() async {
@@ -124,6 +149,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _afterUnlock() {
+    _autoUnlockPending = false;
     phase = VaultPhase.unlocked;
     unlockError = null;
     clipboard.clearAfter = Duration(seconds: settings.clipboardClearSeconds);

@@ -44,6 +44,14 @@ class _NookAppState extends State<NookApp> with WidgetsBindingObserver {
     _state.onLocked = () =>
         _navigator.currentState?.popUntil((route) => route.isFirst);
     _state.addListener(_syncWindowMode);
+    // 原生端在視窗收進狀態列／開回來時通知，Touch ID 的自動提示靠這個判斷。
+    if (widget.state == null) {
+      _windowChannel.setMethodCallHandler((call) async {
+        if (call.method == 'windowVisible') {
+          _state.setWindowVisible(call.arguments == true);
+        }
+      });
+    }
     _state.boot();
   }
 

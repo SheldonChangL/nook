@@ -4,6 +4,7 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private let lockSize = NSSize(width: 540, height: 700)
   private let vaultSize = NSSize(width: 1120, height: 740)
+  private var windowChannel: FlutterMethodChannel?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -15,6 +16,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       name: "nook/window",
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
+    self.windowChannel = windowChannel
     windowChannel.setMethodCallHandler { [weak self] call, result in
       switch (call.method, call.arguments as? String) {
       case ("setMode", let mode?):
@@ -45,10 +47,26 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    orderOut(nil)
-    // 藏起來的時候連 Dock 圖示一起收掉，只留狀態列那個鎖頭；AppDelegate 開回來時再放回 Dock。
-    NSApp.setActivationPolicy(.accessory)
+    hideToStatusBar()
     return false
+  }
+
+  /// 收進狀態列：視窗藏起來、Dock 圖示一起收掉，只留狀態列那個鎖頭。
+  func hideToStatusBar() {
+    orderOut(nil)
+    NSApp.setActivationPolicy(.accessory)
+    windowChannel?.invokeMethod("windowVisible", arguments: false)
+  }
+
+  /// 從狀態列開回來：先放回 Dock，再帶視窗到最前面。
+  /// 切回 regular 之後同一個 run loop 內 activate 不一定生效，所以延後一拍。
+  func showFromStatusBar() {
+    NSApp.setActivationPolicy(.regular)
+    DispatchQueue.main.async {
+      self.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+      self.windowChannel?.invokeMethod("windowVisible", arguments: true)
+    }
   }
 
   private func setWindowMode(_ mode: String) {

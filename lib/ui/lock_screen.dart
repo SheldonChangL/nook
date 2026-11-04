@@ -38,11 +38,10 @@ class _LockScreenState extends State<LockScreen> {
   @override
   void initState() {
     super.initState();
-    // 有開 Touch ID 就先問一次，省得每次都要打字。
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!_isSetup && widget.state.biometricArmed) {
-        await widget.state.unlockWithBiometrics();
-      }
+    // 有開 Touch ID 就先問一次，省得每次都要打字。視窗收在狀態列時
+    // AppState 會先記著，等開回來再問。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isSetup) widget.state.autoUnlockWithBiometrics();
     });
   }
 

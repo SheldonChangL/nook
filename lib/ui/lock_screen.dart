@@ -390,8 +390,10 @@ class _VaultMarkPainter extends CustomPainter {
 
 // ------------------------------------------------------------------ 門縫場景
 
-/// 上半部的主視覺：右側一扇往外推開的門，門縫上窄下寬，冷光從縫裡透出來，
-/// 柔柔地灑在地板上往左邊漫開，剛好停在表單上緣。
+/// 上半部的主視覺，結構照 mockup 是個「反 Z」：
+/// 右側一扇往外推開的門，門縫是一條等寬的直立光帶；門縫頂端有一道亮邊
+/// 沿著門頂往右上延伸到門的遠角，底端的光則往左下灑在地板上漫開。
+/// 門板本身是暗的，只比牆面亮一階。
 ///
 /// 幾何全部用比例寫，窗寬 540 / 高 700 時對得上 mockup；視窗略大也不會跑掉。
 class _DoorwayPainter extends CustomPainter {
@@ -406,8 +408,8 @@ class _DoorwayPainter extends CustomPainter {
     final bounds = Offset.zero & size;
     final dark = palette.dark;
     final accent = palette.accent;
-    final glow = dark ? const Color(0xFF9FEBFF) : const Color(0xFF7FD4F7);
-    final bright = dark ? const Color(0xFFDFF9FF) : const Color(0xFFBDEBFA);
+    final glow = dark ? const Color(0xFF8FE4FA) : const Color(0xFF7FD4F7);
+    final bright = dark ? const Color(0xFFDCF8FF) : const Color(0xFFBDEBFA);
 
     // 1. 底：左上略亮、往右下沉下去。
     canvas.drawRect(
@@ -417,21 +419,24 @@ class _DoorwayPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: dark
-              ? const [Color(0xFF0D1F2E), Color(0xFF071520), Color(0xFF05101A)]
+              ? const [Color(0xFF0C1D2B), Color(0xFF071520), Color(0xFF05101A)]
               : const [Color(0xFFFBFBFA), Color(0xFFF2F3F1), Color(0xFFE9ECEB)],
           stops: const [0, .55, 1],
         ).createShader(bounds),
     );
 
-    // 門縫四個角：上緣窄、下緣寬，門是往畫面外側推開的。
-    final crackTopL = Offset(w * .690, h * .170);
-    final crackTopR = Offset(w * .715, h * .165);
-    final crackBotR = Offset(w * .745, h * .485);
-    final crackBotL = Offset(w * .660, h * .470);
-    final floorY = crackBotL.dy;
+    // 門縫：等寬直立光帶，頂邊跟著門頂的透視微微上揚。
+    final crackTL = Offset(w * .687, h * .178);
+    final crackTR = Offset(w * .727, h * .170);
+    final crackBR = Offset(w * .727, h * .465);
+    final crackBL = Offset(w * .687, h * .465);
+    // 門的遠角（門板右上、右下）。
+    final doorTopFar = Offset(w * .89, h * .113);
+    final doorBotFar = Offset(w * .89, h * .54);
+    final floorY = crackBL.dy;
 
     // 2. 地板：從門縫底部高度往下是地面，比牆面亮一階，邊界柔化。
-    final floor = Rect.fromLTRB(0, floorY - 6, w, h);
+    final floor = Rect.fromLTRB(0, floorY - 4, w, h);
     canvas.drawRect(
       floor,
       Paint()
@@ -440,38 +445,38 @@ class _DoorwayPainter extends CustomPainter {
           end: Alignment.bottomCenter,
           colors: dark
               ? [
-                  const Color(0xFF0F2738).withValues(alpha: .7),
+                  const Color(0xFF0E2536).withValues(alpha: .45),
                   const Color(0xFF071520).withValues(alpha: 0),
                 ]
               : [
-                  const Color(0xFFD9E2E6).withValues(alpha: .7),
+                  const Color(0xFFD9E2E6).withValues(alpha: .5),
                   const Color(0xFFF2F3F1).withValues(alpha: 0),
                 ],
-          stops: const [0, .65],
+          stops: const [0, .8],
         ).createShader(floor),
     );
 
-    // 3. 環境光：門縫周圍一大團柔光，把牆、地板都染上一點藍。
-    final mid = Offset(w * .71, h * .34);
-    final ambient = Rect.fromCircle(center: mid, radius: w * .62);
+    // 3. 環境光：門縫左邊的牆被染上一層淡藍。
+    final mid = Offset(w * .69, h * .33);
+    final ambient = Rect.fromCircle(center: mid, radius: w * .5);
     canvas.drawCircle(
       mid,
-      w * .62,
+      w * .5,
       Paint()
         ..shader = RadialGradient(
           colors: [
-            accent.withValues(alpha: dark ? .26 : .20),
+            accent.withValues(alpha: dark ? .20 : .16),
             accent.withValues(alpha: 0),
           ],
         ).createShader(ambient),
     );
 
-    // 4. 門板：門縫右側那片在透視裡斜出去的平面，靠縫的那側被光打亮。
+    // 4. 門板：暗的，只比牆亮一階，靠縫那側稍微受光。
     final door = Path()
-      ..moveTo(crackTopR.dx, crackTopR.dy)
-      ..lineTo(w * .86, h * .12)
-      ..lineTo(w * .86, h * .54)
-      ..lineTo(crackBotR.dx, crackBotR.dy)
+      ..moveTo(crackTR.dx, crackTR.dy)
+      ..lineTo(doorTopFar.dx, doorTopFar.dy)
+      ..lineTo(doorBotFar.dx, doorBotFar.dy)
+      ..lineTo(crackBR.dx, crackBR.dy)
       ..close();
     canvas.drawPath(
       door,
@@ -480,92 +485,107 @@ class _DoorwayPainter extends CustomPainter {
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: dark
-              ? const [Color(0xFF1B4056), Color(0xFF0D2232)]
-              : const [Color(0xFFFFFFFF), Color(0xFFDFE7EB)],
-        ).createShader(Rect.fromLTRB(crackTopR.dx, 0, w * .86, h)),
+              ? const [Color(0xFF10344A), Color(0xFF0A2234), Color(0xFF061421)]
+              : const [Color(0xFFFFFFFF), Color(0xFFE8EEF1), Color(0xFFEDF0EF)],
+          stops: const [0, .4, 1],
+        ).createShader(Rect.fromLTRB(crackTR.dx, 0, doorTopFar.dx, h)),
+    );
+    // 門板底邊的一道淡邊，交代門板與地板的交線。
+    canvas.drawLine(
+      crackBR,
+      doorBotFar,
+      Paint()
+        ..color = glow.withValues(alpha: dark ? .18 : .3)
+        ..strokeWidth = 1,
+    );
+
+    // 5. 反 Z 的上一撇：門頂那道被光打亮的薄邊，從門縫頂往右上到遠角，越遠越淡。
+    final lintel = Path()
+      ..moveTo(crackTL.dx, crackTL.dy)
+      ..lineTo(doorTopFar.dx, doorTopFar.dy)
+      ..lineTo(doorTopFar.dx, doorTopFar.dy + 1.5)
+      ..lineTo(crackTR.dx, crackTR.dy + 7)
+      ..close();
+    final lintelRect = Rect.fromPoints(crackTL, doorTopFar);
+    canvas.drawPath(
+      lintel,
+      Paint()
+        ..color = glow.withValues(alpha: dark ? .5 : .45)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
     canvas.drawPath(
-      door,
+      lintel,
       Paint()
         ..shader = LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [
-            glow.withValues(alpha: dark ? .35 : .40),
-            glow.withValues(alpha: 0),
-          ],
-          stops: const [0, .5],
-        ).createShader(Rect.fromLTRB(crackTopR.dx, 0, w * .86, h)),
+          colors: [bright, glow, glow.withValues(alpha: .15)],
+          stops: const [0, .35, 1],
+        ).createShader(lintelRect),
     );
 
-    // 5. 地板上的光：從門縫底部往左漫開的大片柔光，不要硬邊。
-    final spill = Path()
-      ..moveTo(crackBotL.dx, crackBotL.dy)
-      ..lineTo(crackBotR.dx, crackBotR.dy)
-      ..lineTo(w * .64, h * .62)
-      ..lineTo(w * .04, h * .57)
-      ..lineTo(w * .30, h * .50)
+    // 6. 反 Z 的下一撇：門縫底的光往左下灑在地板上，近處亮、遠處散掉。
+    final spillRect = Rect.fromLTRB(w * .08, floorY, crackBR.dx, h * .60);
+    final spillWide = Path()
+      ..moveTo(crackBL.dx, crackBL.dy)
+      ..lineTo(crackBR.dx, crackBR.dy + 2)
+      ..lineTo(w * .70, h * .58)
+      ..lineTo(w * .08, h * .56)
+      ..lineTo(w * .40, h * .49)
       ..close();
     canvas.drawPath(
-      spill,
+      spillWide,
       Paint()
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26)
         ..shader = LinearGradient(
           begin: Alignment.centerRight,
           end: Alignment.centerLeft,
           colors: [
-            glow.withValues(alpha: dark ? .50 : .45),
-            accent.withValues(alpha: dark ? .16 : .14),
+            glow.withValues(alpha: dark ? .40 : .38),
+            accent.withValues(alpha: dark ? .10 : .10),
             accent.withValues(alpha: 0),
           ],
-          stops: const [0, .3, 1],
-        ).createShader(Rect.fromLTRB(w * .04, floorY, crackBotR.dx, h * .62)),
+          stops: const [0, .35, 1],
+        ).createShader(spillRect),
     );
-    // 靠近門縫那段再亮一點，讓光有個來源。
-    final core = Path()
-      ..moveTo(crackBotL.dx, crackBotL.dy)
-      ..lineTo(crackBotR.dx, crackBotR.dy)
-      ..lineTo(w * .60, h * .56)
-      ..lineTo(w * .36, h * .52)
+    final spillCore = Path()
+      ..moveTo(crackBL.dx - 2, crackBL.dy)
+      ..lineTo(crackBR.dx, crackBR.dy + 2)
+      ..lineTo(w * .60, h * .53)
+      ..lineTo(w * .44, h * .515)
       ..close();
     canvas.drawPath(
-      core,
+      spillCore,
       Paint()
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9)
         ..shader = LinearGradient(
           begin: Alignment.centerRight,
           end: Alignment.centerLeft,
           colors: [
-            bright.withValues(alpha: dark ? .55 : .6),
+            bright.withValues(alpha: dark ? .7 : .7),
             glow.withValues(alpha: 0),
           ],
-        ).createShader(Rect.fromLTRB(w * .36, floorY, crackBotR.dx, h * .56)),
+        ).createShader(Rect.fromLTRB(w * .44, floorY, crackBR.dx, h * .53)),
     );
 
-    // 6. 門縫本體：上窄下寬的一片光，上端偏白、下端偏飽和的青。
+    // 7. 門縫本體：等寬光帶，上下兩端最亮、中段稍沉；外罩一層柔光。
     final crack = Path()
-      ..moveTo(crackTopL.dx, crackTopL.dy)
-      ..lineTo(crackTopR.dx, crackTopR.dy)
-      ..lineTo(crackBotR.dx, crackBotR.dy)
-      ..lineTo(crackBotL.dx, crackBotL.dy)
+      ..moveTo(crackTL.dx, crackTL.dy)
+      ..lineTo(crackTR.dx, crackTR.dy)
+      ..lineTo(crackBR.dx, crackBR.dy)
+      ..lineTo(crackBL.dx, crackBL.dy)
       ..close();
     final crackRect = Rect.fromLTRB(
-      crackBotL.dx,
-      crackTopR.dy,
-      crackBotR.dx,
-      crackBotR.dy,
+      crackBL.dx,
+      crackTR.dy,
+      crackBR.dx,
+      crackBR.dy,
     );
     canvas.drawPath(
       crack,
       Paint()
-        ..color = glow.withValues(alpha: dark ? .55 : .5)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
-    );
-    canvas.drawPath(
-      crack,
-      Paint()
-        ..color = glow.withValues(alpha: .8)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+        ..color = glow.withValues(alpha: dark ? .45 : .4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
     );
     canvas.drawPath(
       crack,
@@ -573,40 +593,53 @@ class _DoorwayPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [bright, glow, accent],
-          stops: const [0, .45, 1],
+          colors: dark
+              ? const [
+                  Color(0xFF86E4FA),
+                  Color(0xFF55B8D8),
+                  Color(0xFF48AACB),
+                  Color(0xFF6CCCE6),
+                  Color(0xFFDDF9FF),
+                ]
+              : const [
+                  Color(0xFF8ADCF5),
+                  Color(0xFF5FBBE0),
+                  Color(0xFF55AFD6),
+                  Color(0xFF7CCDEB),
+                  Color(0xFFD6F4FD),
+                ],
+          stops: const [0, .25, .6, .9, 1],
         ).createShader(crackRect),
     );
-    // 縫的左緣最亮，像門框邊緣被直接照到。
+    // 光帶左緣有一條更亮的細線，是門框被直接照到的邊。
     canvas.drawLine(
-      crackTopL,
-      crackBotL,
+      crackTL,
+      crackBL,
       Paint()
-        ..color = Colors.white.withValues(alpha: dark ? .85 : .9)
-        ..strokeWidth = 1.2,
+        ..color = bright.withValues(alpha: dark ? .9 : .95)
+        ..strokeWidth = 1.5,
     );
-
-    // 7. 門頂的一點逸光，暗示門縫上方也漏了一點光到天花板。
-    final topGlow = Rect.fromCircle(center: crackTopR, radius: w * .14);
-    canvas.drawCircle(
-      crackTopR,
-      w * .14,
+    // 底端最亮的那一小段。
+    final hot = Rect.fromLTRB(
+      crackBL.dx - 6,
+      floorY - 14,
+      crackBR.dx + 6,
+      floorY + 6,
+    );
+    canvas.drawRect(
+      hot,
       Paint()
-        ..shader = RadialGradient(
-          colors: [
-            glow.withValues(alpha: dark ? .28 : .3),
-            glow.withValues(alpha: 0),
-          ],
-        ).createShader(topGlow),
+        ..color = Colors.white.withValues(alpha: dark ? .55 : .6)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
     // 8. 淺色模式牆面太平，門板下緣補一道淡影讓門看起來是立體的。
     if (!dark) {
       final shade = Path()
-        ..moveTo(crackBotR.dx, crackBotR.dy)
-        ..lineTo(w * .86, h * .54)
-        ..lineTo(w * .86, h * .63)
-        ..lineTo(crackBotR.dx + w * .04, crackBotR.dy + h * .05)
+        ..moveTo(crackBR.dx, crackBR.dy)
+        ..lineTo(doorBotFar.dx, doorBotFar.dy)
+        ..lineTo(doorBotFar.dx, doorBotFar.dy + h * .08)
+        ..lineTo(crackBR.dx + w * .04, crackBR.dy + h * .05)
         ..close();
       canvas.drawPath(
         shade,

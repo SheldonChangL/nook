@@ -235,8 +235,8 @@ class AppState extends ChangeNotifier {
   Future<String?> setBiometricEnabled(bool enabled) async {
     if (enabled) {
       final dek = await store.exportDek();
-      final ok = await biometrics.enroll(dek);
-      if (!ok) return 'Touch ID 沒有通過，維持關閉';
+      final error = await biometrics.enroll(dek);
+      if (error != null) return error;
       biometricArmed = true;
     } else {
       await biometrics.forget();

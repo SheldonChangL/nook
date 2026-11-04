@@ -20,6 +20,11 @@ class BiometricGate {
                 accountName: 'tw.com.jetopto.nook',
                 accessibility: KeychainAccessibility.first_unlock_this_device,
                 synchronizable: false,
+                // 預設走 data protection keychain，但那條路要有 Team ID 的簽章
+                // （keychain-access-groups）才寫得進去；本機 ad-hoc 簽的 app
+                // 會吃到 errSecMissingEntitlement (-34018)，Touch ID 永遠開不起來。
+                // 走傳統的 login keychain，沙盒 app 存自己的項目不需要額外 entitlement。
+                usesDataProtectionKeychain: false,
               ),
             );
 
@@ -53,12 +58,23 @@ class BiometricGate {
       _probe(() async => (await _storage.read(key: _dekKey)) != null, false);
 
   /// 開啟 Touch ID：先驗一次生物辨識，過了才把 DEK 放進 Keychain。
-  Future<bool> enroll(List<int> dek) async {
+  /// 回 null 表示成功，否則是給使用者看的失敗原因。
+  Future<String?> enroll(List<int> dek) async {
     if (!await _authenticate('確認是本人，才會把解鎖金鑰交給 Touch ID')) {
-      return false;
+      return 'Touch ID 沒有通過，維持關閉';
     }
-    await _storage.write(key: _dekKey, value: base64Encode(dek));
-    return true;
+    try {
+      await _storage.write(key: _dekKey, value: base64Encode(dek));
+    } catch (e) {
+      // Keychain 寫不進去不能悄悄吞掉：開關會停在關閉，使用者卻不知道為什麼。
+      return '寫入 Keychain 失敗，維持關閉（${_describe(e)}）';
+    }
+    return null;
+  }
+
+  static String _describe(Object e) {
+    final text = e.toString();
+    return text.length > 120 ? '${text.substring(0, 120)}…' : text;
   }
 
   /// 關閉 Touch ID，把 Keychain 裡那份刪掉。

@@ -652,8 +652,7 @@ class _SquashY extends GradientTransform {
 
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
-      Matrix4.identity()
-        ..translate(center.dx, center.dy)
-        ..scale(1.0, factor)
-        ..translate(-center.dx, -center.dy);
+      Matrix4.translationValues(center.dx, center.dy, 0) *
+      Matrix4.diagonal3Values(1, factor, 1) *
+      Matrix4.translationValues(-center.dx, -center.dy, 0);
 }

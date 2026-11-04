@@ -28,8 +28,17 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
 
+  private static let statusAutosaveName = "nook"
+
   private func installStatusItem() {
+    // 新加的狀態列項目預設排在最左邊，在有瀏海的機型上、選單列擠的時候
+    // 會直接被系統藏掉。先登記一個靠右的預設位置（從右邊算起的點數），
+    // 使用者之後 ⌘ 拖曳調整的位置照樣會存下來覆蓋這個預設。
+    UserDefaults.standard.register(defaults: [
+      "NSStatusItem Preferred Position \(Self.statusAutosaveName)": 260,
+    ])
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    item.autosaveName = Self.statusAutosaveName
     guard let button = item.button else { return }
     // 用系統的鎖頭 template 圖，深淺色選單列都會自動反色。
     let image = NSImage(named: NSImage.lockLockedTemplateName)

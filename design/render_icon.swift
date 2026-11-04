@@ -2,10 +2,12 @@
 import Foundation
 import ImageIO
 
-let blueTop = CGColor(red: 38 / 255, green: 126 / 255, blue: 190 / 255, alpha: 1)
-let blueBottom = CGColor(red: 5 / 255, green: 46 / 255, blue: 78 / 255, alpha: 1)
-let frameWhite = CGColor(red: 232 / 255, green: 245 / 255, blue: 255 / 255, alpha: 1)
-let white = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+// 色票取自 design/nook_icon_mockups.svg 的 01「The Nook」。
+let blueTop = CGColor(red: 57 / 255, green: 127 / 255, blue: 192 / 255, alpha: 1)
+let blueBottom = CGColor(red: 6 / 255, green: 45 / 255, blue: 78 / 255, alpha: 1)
+let frameWhite = CGColor(red: 234 / 255, green: 246 / 255, blue: 255 / 255, alpha: 1)
+let keyhole = CGColor(red: 10 / 255, green: 53 / 255, blue: 88 / 255, alpha: 1)
+let highlight = CGColor(red: 141 / 255, green: 219 / 255, blue: 252 / 255, alpha: 0.8)
 
 func squirclePath(in rect: CGRect, n: Double = 5, steps: Int = 720) -> CGPath {
     let path = CGMutablePath(), a = Double(rect.width) / 2, b = Double(rect.height) / 2
@@ -33,21 +35,34 @@ func renderIcon(size: CGFloat) -> CGImage? {
     ctx.saveGState(); ctx.addPath(squirclePath(in: plate)); ctx.clip()
     let gradient = CGGradient(colorsSpace: cs, colors: [blueTop, blueBottom] as CFArray, locations: [0, 1])!
     ctx.drawLinearGradient(gradient, start: CGPoint(x: plate.midX, y: plate.maxY), end: CGPoint(x: plate.midX, y: plate.minY), options: []); ctx.restoreGState()
-    // Nook 是私密的小角落：用拱門與鎖孔，而不是保險箱轉盤。
-    // 後者在 Dock 的小尺寸下會讀成風扇。
-    let outerW = plate.width * 0.56, outerH = plate.height * 0.62
-    let outer = CGRect(x: plate.midX - outerW / 2, y: plate.midY - outerH * 0.43, width: outerW, height: outerH)
-    let frame = CGPath(roundedRect: outer, cornerWidth: outerW * 0.28, cornerHeight: outerW * 0.28, transform: nil)
-    ctx.setFillColor(frameWhite); ctx.addPath(frame); ctx.fillPath()
-    let innerInset = outerW * 0.105, inner = outer.insetBy(dx: innerInset, dy: innerInset)
-    let door = CGPath(roundedRect: inner, cornerWidth: inner.width * 0.28, cornerHeight: inner.width * 0.28, transform: nil)
-    ctx.setFillColor(blueBottom); ctx.addPath(door); ctx.fillPath()
-    ctx.setStrokeColor(CGColor(red: 143 / 255, green: 210 / 255, blue: 1, alpha: 0.65)); ctx.setLineWidth(max(size * 0.011, 1)); ctx.addPath(door); ctx.strokePath()
-    let keyCenter = CGPoint(x: inner.midX, y: inner.midY - inner.height * 0.04)
-    let keyCircle = CGRect(x: keyCenter.x - inner.width * 0.13, y: keyCenter.y - inner.width * 0.13, width: inner.width * 0.26, height: inner.width * 0.26)
-    ctx.setFillColor(white); ctx.fillEllipse(in: keyCircle)
-    ctx.setFillColor(white); ctx.addPath(roundedRect(CGRect(x: keyCenter.x - inner.width * 0.045, y: keyCenter.y, width: inner.width * 0.09, height: inner.height * 0.20), radius: inner.width * 0.045)); ctx.fillPath()
-    ctx.setFillColor(blueBottom); ctx.fillEllipse(in: CGRect(x: keyCenter.x - inner.width * 0.035, y: keyCenter.y - inner.width * 0.035, width: inner.width * 0.07, height: inner.width * 0.07))
+    // 01「The Nook」：一道有遮蔽感的拱門變成鎖頭。造型照 mockup 的 240×240 座標畫，
+    // 把它縮放到色板上；CoreGraphics 的 y 軸朝上，所以同時上下翻轉。
+    ctx.saveGState()
+    let unit = plate.width / 240
+    ctx.translateBy(x: plate.minX, y: plate.maxY)
+    ctx.scaleBy(x: unit, y: -unit)
+    // 鎖環：粗的拱形線，兩端圓頭。
+    let shackle = CGMutablePath()
+    shackle.move(to: CGPoint(x: 61, y: 178))
+    shackle.addLine(to: CGPoint(x: 61, y: 114))
+    shackle.addCurve(to: CGPoint(x: 120, y: 52), control1: CGPoint(x: 61, y: 78), control2: CGPoint(x: 87, y: 52))
+    shackle.addCurve(to: CGPoint(x: 179, y: 114), control1: CGPoint(x: 153, y: 52), control2: CGPoint(x: 179, y: 78))
+    shackle.addLine(to: CGPoint(x: 179, y: 178))
+    ctx.setStrokeColor(frameWhite); ctx.setLineWidth(22); ctx.setLineCap(.round)
+    ctx.addPath(shackle); ctx.strokePath()
+    // 鎖身：寬的圓角方塊。
+    ctx.setFillColor(frameWhite)
+    ctx.addPath(roundedRect(CGRect(x: 48, y: 107, width: 144, height: 91), radius: 23)); ctx.fillPath()
+    // 鑰匙孔：圓加一截直柄。
+    ctx.setFillColor(keyhole)
+    ctx.fillEllipse(in: CGRect(x: 105, y: 132, width: 30, height: 30))
+    ctx.fill(CGRect(x: 112, y: 158, width: 16, height: 19))
+    // 鎖環左上一道細細的受光邊。
+    let shine = CGMutablePath()
+    shine.move(to: CGPoint(x: 70, y: 93))
+    shine.addCurve(to: CGPoint(x: 120, y: 47), control1: CGPoint(x: 82, y: 63), control2: CGPoint(x: 106, y: 47))
+    ctx.setStrokeColor(highlight); ctx.setLineWidth(4); ctx.addPath(shine); ctx.strokePath()
+    ctx.restoreGState()
     return ctx.makeImage()
 }
 

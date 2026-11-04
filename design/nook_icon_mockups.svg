@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080">
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#397FC0"/><stop offset="1" stop-color="#062D4E"/></linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1B9CB1"/><stop offset="1" stop-color="#063B55"/></linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7559B8"/><stop offset="1" stop-color="#182F68"/></linearGradient>
+    <linearGradient id="d" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#202F55"/><stop offset="1" stop-color="#080F23"/></linearGradient>
+    <linearGradient id="e" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#157A7C"/><stop offset="1" stop-color="#092B3D"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="145%"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-opacity=".22"/></filter>
+  </defs>
+  <rect width="1600" height="1080" rx="40" fill="#F5F7FA"/>
+  <text x="100" y="108" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="50" font-weight="700">Nook — App icon directions</text>
+  <text x="100" y="155" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="25">Security without the usual “bank vault” clichés. Each option stays readable at Dock size.</text>
+
+  <!-- 01 -->
+  <g transform="translate(112 240)" filter="url(#shadow)">
+    <rect width="240" height="240" rx="58" fill="url(#a)"/>
+    <path d="M61 178V114C61 78 87 52 120 52s59 26 59 62v64" fill="none" stroke="#EAF6FF" stroke-width="22" stroke-linecap="round"/>
+    <rect x="48" y="107" width="144" height="91" rx="23" fill="#EAF6FF"/>
+    <path d="M120 132a15 15 0 0 0-8 28v17h16v-17a15 15 0 0 0-8-28Z" fill="#0A3558"/>
+    <path d="M70 93c12-30 36-46 50-46" fill="none" stroke="#8DDBFC" stroke-width="4" opacity=".8" stroke-linecap="round"/>
+  </g>
+  <text x="112" y="530" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="25" font-weight="700">01 / The Nook</text>
+  <text x="112" y="565" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="20">A sheltered arch becomes a lock.</text>
+
+  <!-- 02 -->
+  <g transform="translate(408 240)" filter="url(#shadow)">
+    <rect width="240" height="240" rx="58" fill="url(#b)"/>
+    <path d="M57 181V86c0-19 15-34 34-34h58c19 0 34 15 34 34v95" fill="none" stroke="#D9FFFA" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M75 181V91c0-12 9-21 21-21h48c12 0 21 9 21 21v90" fill="#0C5263" stroke="#A4F5E8" stroke-width="5"/>
+    <path d="M99 162V99l43 63V99" fill="none" stroke="#F1FFFC" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="408" y="530" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="25" font-weight="700">02 / N Monogram</text>
+  <text x="408" y="565" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="20">Nook initial inside a secure threshold.</text>
+
+  <!-- 03 -->
+  <g transform="translate(704 240)" filter="url(#shadow)">
+    <rect width="240" height="240" rx="58" fill="url(#c)"/>
+    <rect x="47" y="47" width="146" height="146" rx="39" fill="none" stroke="#DDD4FF" stroke-width="9" opacity=".8"/>
+    <rect x="69" y="69" width="102" height="102" rx="27" fill="#252D70" stroke="#B4F0FF" stroke-width="5"/>
+    <circle cx="120" cy="120" r="24" fill="none" stroke="#F8F6FF" stroke-width="12"/>
+    <path d="M120 142v16" stroke="#F8F6FF" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="120" cy="120" r="5" fill="#B4F0FF"/>
+  </g>
+  <text x="704" y="530" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="25" font-weight="700">03 / Nested Vault</text>
+  <text x="704" y="565" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="20">Concentric layers signal encryption.</text>
+
+  <!-- 04 -->
+  <g transform="translate(1000 240)" filter="url(#shadow)">
+    <rect width="240" height="240" rx="58" fill="url(#d)"/>
+    <path d="M120 43c38 0 69 31 69 69v69H51v-69c0-38 31-69 69-69Z" fill="#132B4B" stroke="#9CDFFF" stroke-width="7"/>
+    <path d="M84 180v-56c0-20 16-36 36-36s36 16 36 36v56" fill="none" stroke="#EFFBFF" stroke-width="16" stroke-linecap="round"/>
+    <path d="M91 161c17 12 41 12 58 0" fill="none" stroke="#4CC6DC" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="120" cy="124" r="8" fill="#4CC6DC"/>
+  </g>
+  <text x="1000" y="530" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="25" font-weight="700">04 / Private Room</text>
+  <text x="1000" y="565" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="20">A calm, architectural safe place.</text>
+
+  <!-- 05 -->
+  <g transform="translate(1296 240)" filter="url(#shadow)">
+    <rect width="240" height="240" rx="58" fill="url(#e)"/>
+    <path d="M54 177V111c0-37 30-67 67-67h9c37 0 67 30 67 67v66" fill="none" stroke="#A9F4E5" stroke-width="18" stroke-linecap="round"/>
+    <path d="M76 177v-61c0-25 20-45 45-45s45 20 45 45v61" fill="#0B3C49"/>
+    <path d="M104 174V113a17 17 0 1 1 34 0v61" fill="none" stroke="#F2FFFB" stroke-width="15" stroke-linecap="round"/>
+    <path d="M104 174h34" stroke="#F2FFFB" stroke-width="15" stroke-linecap="round"/>
+  </g>
+  <text x="1296" y="530" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="25" font-weight="700">05 / Keyline</text>
+  <text x="1296" y="565" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="20">A keyhole drawn as an open doorway.</text>
+
+  <line x1="100" y1="645" x2="1500" y2="645" stroke="#DDE4EA"/>
+  <text x="100" y="715" fill="#10253A" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="27" font-weight="700">My recommendation: 01</text>
+  <text x="100" y="758" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="24">It is most distinctive, immediately legible, and closest to Nook’s “private corner” meaning. 02 is the stronger choice if you want the new name to lead.</text>
+  <text x="100" y="879" fill="#6A7885" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="21">Preview concepts only — no production app assets have been replaced.</text>
+</svg>

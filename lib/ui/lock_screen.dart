@@ -204,6 +204,9 @@ class _LockScreenState extends State<LockScreen> {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
               visualDensity: VisualDensity.standard,
+              // 淺色 mockup 的按鈕是沉一點的鋼藍配白字。
+              backgroundColor: palette.dark ? null : const Color(0xFF3F86B6),
+              foregroundColor: palette.dark ? null : Colors.white,
               textStyle: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -241,7 +244,8 @@ class _LockScreenState extends State<LockScreen> {
       fontSize: 14,
       height: 1.3,
       fontWeight: FontWeight.w500,
-      color: palette.text,
+      // 淺色 mockup 的欄位標籤是深灰，不是正文的深藍黑。
+      color: palette.dark ? palette.text : const Color(0xFF515259),
     ),
   );
 
@@ -252,6 +256,9 @@ class _LockScreenState extends State<LockScreen> {
     bool autofocus = false,
   }) {
     final palette = NookPalette(widget.state.darkAppearance);
+    final fieldBorder = palette.dark
+        ? palette.border
+        : const Color(0xFFD7D7D7);
     OutlineInputBorder border(Color color, [double width = 1]) =>
         OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -271,7 +278,10 @@ class _LockScreenState extends State<LockScreen> {
           color: palette.muted,
         ),
         filled: true,
-        fillColor: palette.surfaceRaised,
+        // 淺色 mockup 的欄位近乎白底、中性灰框。
+        fillColor: palette.dark
+            ? palette.surfaceRaised
+            : const Color(0xFFF7F9F8),
         isDense: false,
         // 主題的 isDense 會把欄位壓成 23pt；mockup 是 50pt 高的方塊。
         constraints: const BoxConstraints.tightFor(height: 50),
@@ -294,8 +304,8 @@ class _LockScreenState extends State<LockScreen> {
           ),
         ),
         suffixIconConstraints: const BoxConstraints(minWidth: 46),
-        border: border(palette.border),
-        enabledBorder: border(palette.border),
+        border: border(fieldBorder),
+        enabledBorder: border(fieldBorder),
         focusedBorder: border(palette.accent, 1.4),
       ),
     );
@@ -408,8 +418,8 @@ class _DoorwayPainter extends CustomPainter {
     final bounds = Offset.zero & size;
     final dark = palette.dark;
     final accent = palette.accent;
-    final glow = dark ? const Color(0xFF8FE4FA) : const Color(0xFF7FD4F7);
-    final bright = dark ? const Color(0xFFDCF8FF) : const Color(0xFFBDEBFA);
+    final glow = dark ? const Color(0xFF8FE4FA) : const Color(0xFF8CD2F0);
+    final bright = dark ? const Color(0xFFDCF8FF) : const Color(0xFFDDF5FD);
 
     // 1. 底：左上略亮、往右下沉下去。
     canvas.drawRect(
@@ -420,7 +430,7 @@ class _DoorwayPainter extends CustomPainter {
           end: Alignment.bottomRight,
           colors: dark
               ? const [Color(0xFF0C1D2B), Color(0xFF071520), Color(0xFF05101A)]
-              : const [Color(0xFFFBFBFA), Color(0xFFF2F3F1), Color(0xFFE9ECEB)],
+              : const [Color(0xFFF7F7F5), Color(0xFFF3F4F1), Color(0xFFEDEFEE)],
           stops: const [0, .55, 1],
         ).createShader(bounds),
     );
@@ -434,27 +444,6 @@ class _DoorwayPainter extends CustomPainter {
     final doorTopFar = Offset(w * .89, h * .113);
     final doorBotFar = Offset(w * .89, h * .54);
     final floorY = crackBL.dy;
-
-    // 2. 地板：從門縫底部高度往下是地面，比牆面亮一階，邊界柔化。
-    final floor = Rect.fromLTRB(0, floorY - 4, w, h);
-    canvas.drawRect(
-      floor,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: dark
-              ? [
-                  const Color(0xFF0E2536).withValues(alpha: .45),
-                  const Color(0xFF071520).withValues(alpha: 0),
-                ]
-              : [
-                  const Color(0xFFD9E2E6).withValues(alpha: .5),
-                  const Color(0xFFF2F3F1).withValues(alpha: 0),
-                ],
-          stops: const [0, .8],
-        ).createShader(floor),
-    );
 
     // 3. 環境光：門縫左邊的牆被染上一層淡藍。
     final mid = Offset(w * .69, h * .33);
@@ -486,7 +475,7 @@ class _DoorwayPainter extends CustomPainter {
           end: Alignment.centerRight,
           colors: dark
               ? const [Color(0xFF10344A), Color(0xFF0A2234), Color(0xFF061421)]
-              : const [Color(0xFFFFFFFF), Color(0xFFE8EEF1), Color(0xFFEDF0EF)],
+              : const [Color(0xFFD3DEE5), Color(0xFFDCE5EA), Color(0xFFE9EDF0)],
           stops: const [0, .4, 1],
         ).createShader(Rect.fromLTRB(crackTR.dx, 0, doorTopFar.dx, h)),
     );
@@ -495,8 +484,15 @@ class _DoorwayPainter extends CustomPainter {
       crackBR,
       doorBotFar,
       Paint()
-        ..color = glow.withValues(alpha: dark ? .18 : .3)
-        ..strokeWidth = 1,
+        ..shader = LinearGradient(
+          colors: [
+            bright.withValues(alpha: dark ? .8 : .9),
+            glow.withValues(alpha: dark ? .25 : .3),
+            glow.withValues(alpha: 0),
+          ],
+          stops: const [0, .5, 1],
+        ).createShader(Rect.fromPoints(crackBR, doorBotFar))
+        ..strokeWidth = 1.2,
     );
 
     // 5. 反 Z 的上一撇：門頂那道被光打亮的薄邊，從門縫頂往右上到遠角，越遠越淡。
@@ -524,48 +520,40 @@ class _DoorwayPainter extends CustomPainter {
         ).createShader(lintelRect),
     );
 
-    // 6. 反 Z 的下一撇：門縫底的光往左下灑在地板上，近處亮、遠處散掉。
-    final spillRect = Rect.fromLTRB(w * .08, floorY, crackBR.dx, h * .60);
-    final spillWide = Path()
-      ..moveTo(crackBL.dx, crackBL.dy)
-      ..lineTo(crackBR.dx, crackBR.dy + 2)
-      ..lineTo(w * .70, h * .58)
-      ..lineTo(w * .08, h * .56)
-      ..lineTo(w * .40, h * .49)
+    // 6. 反 Z 的下一撇：門縫底的光打在地板上。上緣是一條清楚的斜線從門縫底
+    //    往左下走，光從門縫底往外衰減：往左、往下都散掉，右邊沿門板底線帶一小段。
+    final spill = Path()
+      ..moveTo(0, floorY + h * .085)
+      ..lineTo(crackBL.dx, crackBL.dy)
+      ..lineTo(crackBR.dx, crackBR.dy)
+      ..lineTo(crackBR.dx + w * .14, crackBR.dy + h * .065)
+      ..lineTo(w, floorY + h * .36)
+      ..lineTo(0, floorY + h * .36)
       ..close();
     canvas.drawPath(
-      spillWide,
+      spill,
       Paint()
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26)
-        ..shader = LinearGradient(
-          begin: Alignment.centerRight,
-          end: Alignment.centerLeft,
+        ..shader = RadialGradient(
           colors: [
-            glow.withValues(alpha: dark ? .40 : .38),
-            accent.withValues(alpha: dark ? .10 : .10),
+            bright.withValues(alpha: dark ? .9 : .9),
+            glow.withValues(alpha: dark ? .55 : .5),
+            accent.withValues(alpha: dark ? .18 : .14),
             accent.withValues(alpha: 0),
           ],
-          stops: const [0, .35, 1],
-        ).createShader(spillRect),
+          stops: const [0, .15, .42, 1],
+          transform: _SquashY(crackBL, .38),
+        ).createShader(Rect.fromCircle(center: crackBL, radius: w * .62)),
     );
-    final spillCore = Path()
-      ..moveTo(crackBL.dx - 2, crackBL.dy)
-      ..lineTo(crackBR.dx, crackBR.dy + 2)
-      ..lineTo(w * .60, h * .53)
-      ..lineTo(w * .44, h * .515)
-      ..close();
-    canvas.drawPath(
-      spillCore,
+    // 地板整片再罩一層很淡的藍，讓光不是只有那一片楔形。
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * .55, floorY + h * .17),
+        width: w * .95,
+        height: h * .18,
+      ),
       Paint()
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9)
-        ..shader = LinearGradient(
-          begin: Alignment.centerRight,
-          end: Alignment.centerLeft,
-          colors: [
-            bright.withValues(alpha: dark ? .7 : .7),
-            glow.withValues(alpha: 0),
-          ],
-        ).createShader(Rect.fromLTRB(w * .44, floorY, crackBR.dx, h * .53)),
+        ..color = accent.withValues(alpha: dark ? .07 : .05)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
     );
 
     // 7. 門縫本體：等寬光帶，上下兩端最亮、中段稍沉；外罩一層柔光。
@@ -602,11 +590,11 @@ class _DoorwayPainter extends CustomPainter {
                   Color(0xFFDDF9FF),
                 ]
               : const [
-                  Color(0xFF8ADCF5),
-                  Color(0xFF5FBBE0),
-                  Color(0xFF55AFD6),
-                  Color(0xFF7CCDEB),
-                  Color(0xFFD6F4FD),
+                  Color(0xFF5FA8D7),
+                  Color(0xFF70B9E3),
+                  Color(0xFF81C7EC),
+                  Color(0xFFA8DEF5),
+                  Color(0xFFDCF8FD),
                 ],
           stops: const [0, .25, .6, .9, 1],
         ).createShader(crackRect),
@@ -653,4 +641,19 @@ class _DoorwayPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DoorwayPainter oldDelegate) =>
       oldDelegate.palette.dark != palette.dark;
+}
+
+/// 把徑向漸層以 [center] 為中心在垂直方向壓扁，地板上的光才會是扁的橢圓而不是圓。
+class _SquashY extends GradientTransform {
+  const _SquashY(this.center, this.factor);
+
+  final Offset center;
+  final double factor;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.identity()
+        ..translate(center.dx, center.dy)
+        ..scale(1.0, factor)
+        ..translate(-center.dx, -center.dy);
 }

@@ -1,7 +1,7 @@
 import Cocoa
 import FlutterMacOS
 
-class MainFlutterWindow: NSWindow {
+class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private let lockSize = NSSize(width: 540, height: 700)
   private let vaultSize = NSSize(width: 1120, height: 740)
 
@@ -31,6 +31,9 @@ class MainFlutterWindow: NSWindow {
 
     super.awakeFromNib()
 
+    // 紅色關閉鈕只把視窗藏起來，app 留在狀態列；見 AppDelegate。
+    self.delegate = self
+
     // App 每次都先進鎖定畫面；解鎖後由 Flutter channel 展開成保險庫尺寸。
     // 預設外觀是深色，先設好免得第一幀閃一下白色標題列。
     self.appearance = NSAppearance(named: .darkAqua)
@@ -39,6 +42,11 @@ class MainFlutterWindow: NSWindow {
       self.setContentSize(self.lockSize)
       self.center()
     }
+  }
+
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    orderOut(nil)
+    return false
   }
 
   private func setWindowMode(_ mode: String) {

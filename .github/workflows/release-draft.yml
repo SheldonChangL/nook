@@ -1,0 +1,171 @@
+# 建立「草稿」GitHub Release：在同一個 commit 上重新建置 Windows 安裝器／ZIP 與 Linux amd64 .deb，
+# 比對 SHA256SUMS 之後，把安裝檔掛到一個 draft release 上。草稿只有對 repo 有寫入權限的人看得到，
+# tag 也要等發佈時才建立。
+#
+# 這支**不會**公開發佈。驗收通過後，由人另外明確操作：
+#   GitHub 網頁：Releases → 該草稿 → Edit → Publish release
+#   或 gh release edit <tag> --repo SheldonChangL/nook --draft=false
+#
+# 只能手動觸發，而且 workflow_dispatch 只認預設分支上的 workflow 檔：要先合併進 main 才能用。
+# 合併前請用 PR 觸發的 windows-installer.yml／linux-deb.yml 先在 PR 分支上驗證建置。
+name: Release draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '版本 tag，必須等於 v + pubspec.yaml 的 X.Y.Z（例如 v1.0.0）'
+        required: true
+        type: string
+      prerelease:
+        description: '標為 pre-release（未簽章的早期版本建議保持勾選）'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# 同時只跑一個。注意：GitHub 每個群組只保留一個排隊中的執行，排隊時再觸發第三次，前一個排隊的會被取消。
+concurrency:
+  group: release-draft
+  cancel-in-progress: false
+
+jobs:
+  # 網頁與 gh workflow run --ref 都能選其他分支或 tag；草稿只能從 main 建，否則發佈時 tag 會落在 main 以外的 commit。
+  guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require main
+        run: |
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "只能從 main 建立草稿，這次是 $GITHUB_REF" >&2; exit 1; }
+
+  windows:
+    needs: guard
+    uses: ./.github/workflows/windows-installer.yml
+    permissions:
+      contents: read
+
+  linux:
+    needs: guard
+    uses: ./.github/workflows/linux-deb.yml
+    permissions:
+      contents: read
+
+  draft:
+    needs: [windows, linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # 整個流程只有這個 job 能寫：建立草稿 release、上傳資產。
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 這個 job 的 token 可寫；不留在 .git/config，GitHub API 呼叫都走 GH_TOKEN。
+          persist-credentials: false
+
+      - name: Check tag against pubspec version
+        id: version
+        run: |
+          full="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -1)"
+          short="${full%%+*}"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag 格式要是 vX.Y.Z：$TAG" >&2; exit 1; }
+          [[ "$TAG" == "v$short" ]] || { echo "tag $TAG 和 pubspec 的 $full 不一致" >&2; exit 1; }
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "file=${full//+/-}" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to touch an existing release or tag
+        run: |
+          # 列出所有 release（含草稿；同一個 tag 名可以有好幾個草稿）。API 失敗時 bash -e 直接中止，
+          # 不會被當成「沒有 release」。
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .html_url")"
+          if [[ -n "$existing" ]]; then
+            echo "$TAG 已經有 release（含草稿），這支不覆蓋。先在網頁上檢查或刪掉：" >&2
+            echo "$existing" >&2
+            exit 1
+          fi
+          # 任何同名 tag 都拒絕：草稿的 tag 應該在人按下發佈時才建立。
+          tags="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" --jq '.[].ref')"
+          if grep -qx "refs/tags/$TAG" <<<"$tags"; then
+            echo "tag $TAG 已經存在。換一個版本號，或先確認那個 tag 是怎麼來的。" >&2
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: nook-*
+          path: release
+          merge-multiple: true
+
+      - name: Verify files and checksums
+        working-directory: release
+        env:
+          FULL: ${{ steps.version.outputs.full }}
+          FILE: ${{ steps.version.outputs.file }}
+        run: |
+          expected=(
+            "Nook-$FILE-windows-x64-setup.exe"
+            "Nook-$FILE-windows-x64.zip"
+            "nook_${FULL}_amd64.deb"
+          )
+          for f in "${expected[@]}" SHA256SUMS-windows.txt SHA256SUMS-linux.txt; do
+            [[ -s "$f" ]] || { echo "缺少 $f" >&2; ls -l; exit 1; }
+          done
+          sha256sum -c SHA256SUMS-windows.txt SHA256SUMS-linux.txt
+          # GitHub 會改寫含特殊字元的資產檔名（+ 可能被換掉），SHA256SUMS 裡的名字就對不上了。
+          # .deb 檔名不影響 apt 安裝（版本以套件內的 control 為準），所以上傳前改成不含 + 的名字。
+          # 上一行剛驗過雜湊，mv 不改內容，直接對新名字重算。
+          deb_dst="nook_${FILE}_amd64.deb"
+          if [[ "${expected[2]}" != "$deb_dst" ]]; then
+            mv "${expected[2]}" "$deb_dst"
+            sha256sum "$deb_dst" > SHA256SUMS-linux.txt
+            expected[2]="$deb_dst"
+          fi
+          cat SHA256SUMS-windows.txt SHA256SUMS-linux.txt > SHA256SUMS.txt
+          # 草稿上的每個安裝檔都要列在 SHA256SUMS.txt 裡，而且只有這些檔案。
+          [[ "$(cut -d' ' -f3 SHA256SUMS.txt | sort)" == "$(printf '%s\n' "${expected[@]}" | sort)" ]] \
+            || { echo 'SHA256SUMS 和預期的檔案清單不一致' >&2; cat SHA256SUMS.txt; exit 1; }
+          sha256sum -c SHA256SUMS.txt
+          ls -l
+
+      - name: Create draft release
+        working-directory: release
+        env:
+          FULL: ${{ steps.version.outputs.full }}
+          FILE: ${{ steps.version.outputs.file }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          cat > notes.md <<NOTES
+          **草稿，尚未驗收。** 由 commit ${GITHUB_SHA} 建置（[workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})）。
+
+          | 檔案 | 平台 |
+          |---|---|
+          | \`Nook-${FILE}-windows-x64-setup.exe\` | Windows 10／11 x64 安裝器 |
+          | \`Nook-${FILE}-windows-x64.zip\` | Windows x64 免安裝版（內測用） |
+          | \`nook_${FILE}_amd64.deb\` | Ubuntu 24.04 x64（套件版本 ${FULL}） |
+          | \`SHA256SUMS.txt\` | 以上檔案的 SHA256 |
+
+          - **沒有程式碼簽章。** Windows 的 SmartScreen 會警告「未知的發行者」，要按「其他資訊」→「仍要執行」。
+            下載後請先和 SHA256SUMS.txt 比對雜湊。
+          - 保險庫不在安裝目錄裡：升級、解除安裝都不會刪除資料（Windows：%APPDATA%\\tw.com.jetopto\\Nook；
+            Linux：~/.local/share/tw.com.jetopto.nook）。
+          - 驗收狀態：發佈前請依 CROSS_PLATFORM_INSTALL_PLAN.md 的發行關卡更新這一段。
+          NOTES
+          args=(--draft --target "$GITHUB_SHA" --title "Nook $FULL" --notes-file notes.md)
+          [[ "$PRERELEASE" == "true" ]] && args+=(--prerelease)
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" "${args[@]}" \
+            "Nook-$FILE-windows-x64-setup.exe" \
+            "Nook-$FILE-windows-x64.zip" \
+            "nook_${FILE}_amd64.deb" \
+            SHA256SUMS.txt
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets \
+            --jq '"draft=\(.isDraft) tag=\(.tagName) assets=\([.assets[].name] | join(", "))"'
+          # 上傳後的資產名稱要和 SHA256SUMS.txt 一字不差，否則下載的人無法 sha256sum -c。
+          uploaded="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
+          wanted="$( (cut -d' ' -f3 SHA256SUMS.txt; echo SHA256SUMS.txt) | sort)"
+          [[ "$uploaded" == "$wanted" ]] || { echo '草稿上的資產名稱和 SHA256SUMS 不一致：' >&2; echo "$uploaded" >&2; exit 1; }

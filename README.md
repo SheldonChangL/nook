@@ -11,7 +11,8 @@
 | **帳號** | 服務帳號密碼，含網址、使用者名稱、備註 |
 | **主機 / VM** | 位址、port、登入帳號、跳板機、sudo 密碼、環境變數，可引用某把金鑰 |
 
-macOS app（Flutter），同一份程式碼之後可以編成 iOS / Android。
+桌面 app（Flutter）。macOS 是主要平台；Windows 與 Linux 版已有可建置的程式碼與封裝腳本，
+只提供主密碼解鎖，支援範圍與驗證狀態見下面「[平台支援](#平台支援)」。
 
 > 這個 app 原本叫 SecureManage，後來改名為 Nook，bundle identifier 也一併從
 > `tw.com.jetopto.securemanage` 換成 `tw.com.jetopto.nook`。
@@ -28,11 +29,77 @@ macOS app（Flutter），同一份程式碼之後可以編成 iOS / Android。
 >
 > 有一樣東西**沒有**跟著改：加密檔的檔頭 magic 仍然是 `SM01`。那四個位元組寫在
 > 每個 `.item` 檔的最前面，改了既有項目就全部解不開。
-**沒有任何資料離開這台機器**，Release 版的 entitlements 裡沒有任何網路權限。
+**程式本身沒有任何對外連線**，保險庫只寫在本機。在 macOS 上這件事另外由作業系統擋著：
+Release 版的 entitlements 裡沒有任何網路權限。Windows 與 Linux 沒有對應的沙盒，
+「不連網」只是應用程式的行為，不是作業系統層級的保證。
+
+## 平台支援
+
+| | macOS | Windows | Linux |
+|---|---|---|---|
+| 主密碼解鎖、項目讀寫、自動上鎖、剪貼簿清除 | ✓ | ✓ | ✓ |
+| 快速解鎖 | Touch ID（預設關閉） | 不提供 | 不提供 |
+| 關閉視窗 | 收進狀態列 | 結束程式 | 結束程式 |
+| 快捷鍵修飾鍵 | `⌘` | `Ctrl` | `Ctrl` |
+| 安裝方式 | `scripts/install.sh` | 安裝器 `Nook-<版本>-windows-x64-setup.exe`（另有內測 ZIP） | `.deb` |
+| 下載 | 無（自己在 Mac 上建置） | [Releases](https://github.com/SheldonChangL/nook/releases)（**尚未發佈**，見下方） | [Releases](https://github.com/SheldonChangL/nook/releases)（**尚未發佈**） |
+| 安裝包怎麼建 | `scripts/install.sh` | [`Windows installer` workflow](.github/workflows/windows-installer.yml) 或 `scripts/package_windows.ps1` | [`Linux deb` workflow](.github/workflows/linux-deb.yml) 或 `scripts/package_linux.sh` |
+| 程式碼簽章 | 本機 ad-hoc | **無**（SmartScreen 會警告） | 無（`.deb` 未簽） |
+| 作業系統層級的網路隔離 | App Sandbox | 無 | 無 |
+| 同時開多個執行個體 | 擋下（見下） | 擋下（見下） | 擋下（見下） |
+| 驗收狀態 | 實機使用中 | **未驗證**：安裝器與 workflow 已寫好，尚未在 Windows 上建置、安裝或執行過 | amd64／arm64 都只在容器內驗過，**沒有**實體桌面驗收，見下方 |
+
+Linux 版的驗收狀態（都是 Docker 容器，不是實體桌面）：
+
+- **amd64（首批目標）**：2026-11-11 在原生 x86_64 主機上的 Ubuntu 24.04 容器裡，`flutter analyze` 無問題、
+  `flutter test` 64 項全過、`flutter build linux --release` 與 `scripts/package_linux.sh` 產出
+  `nook_1.0.0+1_amd64.deb`（建置機要另裝 `llvm-18`，否則 release 建置找不到 `llvm-ar` 而失敗）。
+  另一個乾淨的 Ubuntu 24.04 容器用 `apt install --no-install-recommends` 安裝成功、啟動、用假密碼建立保險庫、
+  第二個執行個體被擋下、第一個被 SIGKILL 後能重新取得鎖、`apt remove` 後保險庫保留。
+- **arm64**：同樣在容器內跑過 analyze、test、release 建置、`.deb` 安裝與虛擬顯示器下的啟動與截圖。
+- **還沒做**：實體 Ubuntu 桌面（真的 X11／Wayland、輸入法、HiDPI、睡眠喚醒、從上一版升級）的互動驗收；
+  GitHub Actions 上的 `Linux deb` workflow 也還沒跑過。其他發行版都未驗證。
+2026-11-11 重新產出的 `.deb` 在乾淨容器裡只靠套件依賴就能安裝啟動（`libegl1`／`libgles2` 不必再手動補），
+也驗過從兩個安裝位置啟動時第二個會被擋下。
+
+**Linux 的中文字型**：Flutter 在 Linux 上不會自己找到 CJK 字型（裝了 `fonts-noto-cjk`、fontconfig 也解析得到，
+介面中文仍是方塊，實測）。所以 Linux 版主題明確把 Noto Sans CJK TC／SC／JP 列為字型備援
+（`PlatformProfile.cjkFontFallback`），`.deb` 也把 `fonts-noto-cjk` 列為 **Depends**（不是 Recommends，
+`--no-install-recommends` 才不會漏裝）。元件若自己指定整份 TextStyle（例如 `ButtonStyle.textStyle`、
+`DropdownButton.style`），不會繼承主題的備援，要自己帶上；`test/platform_test.dart` 會掃過主畫面、設定、
+指令面板、新增選單、編輯器與鎖定畫面，抓出沒帶備援的中文。2026-11-11 在全新 Ubuntu 24.04 arm64 容器裡用
+`apt install --no-install-recommends` 裝 release `.deb`，截圖確認上述畫面的中文（含按鈕與下拉選單）都正常顯示。
+macOS／Windows 不改，交給系統備援（Windows 未實機確認）。
+
+**同一個使用者同時只能開一個 Nook。** `vault.json` 的寫入是「讀出 → 改 → 整份寫回」，兩個程序
+真的重疊時，一邊換主密碼、另一邊存設定，就可能拿舊的 KDF 參數或被包住的 DEK 蓋掉新的。
+所以開啟時會先在應用程式支援目錄（`vault/` 的上一層）獨占一個 `nook.lock`，拿不到就停在
+「Nook 已經在執行中」畫面，完全不讀寫保險庫。
+
+- 鎖檔位置跟保險庫一樣由應用程式 ID 決定，不看安裝位置；從兩個不同目錄啟動同一個 App，搶的是同一把鎖。
+- 透過 `dart:ffi` 直接呼叫作業系統：POSIX 用 `open`＋`flock(LOCK_EX|LOCK_NB)`，Windows 用不共用的
+  `CreateFileW`。程序結束或當掉時核心會自動釋放，不會有要手動刪的殘鎖。沒有用 dart:io 的
+  `RandomAccessFile.lockSync`：Linux release 版實測，GC 的 finalizer 會把那個 fd 關掉、鎖跟著消失。
+- 同一個程序裡的換主密碼與存設定也會排隊；暫存檔名每次都不同，不再共用固定的 `.tmp`。
+- 跨程序互斥有測試另開真的程序驗證（`test/instance_lock_test.dart`）。Linux 另在容器裡用 `.deb` 安裝後，
+  實際從兩個不同位置啟動同一個 App 驗過（見下方驗收狀態）；Windows 的 `CreateFileW` 路徑**尚未**在 Windows
+  上建置或執行過。
+- 網路磁碟上的家目錄是否尊重檔案鎖，依檔案系統而定，未驗證。
+
+**為什麼 Windows／Linux 沒有快速解鎖**：macOS 版的 Touch ID 是把資料金鑰（DEK）另存一份在
+Keychain、通過生物辨識才取出。Windows Hello 和 Windows 的安全儲存是兩個互不相干的介面，
+只在讀出 DEK「之後」跳一次 Hello，DEK 並沒有被 Hello 保護，那只是個樣子；Linux 則沒有
+`local_auth` 實作。在能把金鑰真正綁到系統驗證之前，這兩個平台一律只用主密碼，
+設定裡也不會出現這個選項。
+
+（Linux 版仍會連結 `libsecret`：那是 `flutter_secure_storage` 的 Linux 外掛在建置時就要的，
+雖然快速解鎖沒開、執行時不會去用它，`.deb` 還是把它列為依賴。）
 
 ---
 
 ## 安裝
+
+### macOS
 
 需要 Flutter（開發時用的是 3.41.9 stable）與 Xcode。
 
@@ -56,11 +123,126 @@ flutter run -d macos
 那會把 entitlements 整個剝掉，沙盒和「沒有網路權限」這兩件事會一起消失。腳本裡有說明，
 而且會在簽完之後檢查沙盒還在、`get-task-allow` 已經拿掉。
 
+### 下載安裝檔（Windows／Linux）
+
+**目前還沒有可公開下載的版本。** 正式的下載點會是 [GitHub Releases](https://github.com/SheldonChangL/nook/releases)：
+不必登入，每個版本附 Windows 安裝器、Windows ZIP、Ubuntu `.deb` 與 `SHA256SUMS.txt`。
+
+| 檔案 | 平台 |
+|---|---|
+| `Nook-<版本>-windows-x64-setup.exe` | Windows 10／11 x64 安裝器（建議） |
+| `Nook-<版本>-windows-x64.zip` | Windows x64 免安裝版（內測用） |
+| `nook_<版本>_amd64.deb` | Ubuntu 24.04 x64 |
+| `SHA256SUMS.txt` | 以上檔案的 SHA256 |
+
+`<版本>` 是 pubspec 的 version 把 `+` 換成 `-`（`1.0.0+1` → `1.0.0-1`）：GitHub 會改寫資產檔名裡的特殊字元，
+用不含 `+` 的名字，`SHA256SUMS.txt` 才對得上。`.deb` 裡的套件版本仍是 `1.0.0+1`。
+
+下載後先對雜湊再安裝（把要的檔案和 `SHA256SUMS.txt` 放在同一個資料夾）：
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\Nook-1.0.0-1-windows-x64-setup.exe   # 和 SHA256SUMS.txt 裡那一行比對
+```
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS.txt
+```
+
+#### 發行流程（維護者）
+
+workflow 的 Artifacts 要登入 GitHub 才能下載，只給開發與驗收用，不是給使用者的下載點。給使用者的是 Release，
+流程分三步，最後一步一定由人明確操作：
+
+1. **PR 階段**：改到程式、平台目錄、封裝腳本或 workflow 的 PR，會自動跑
+   [`Windows installer`](.github/workflows/windows-installer.yml) 與 [`Linux deb`](.github/workflows/linux-deb.yml)
+   （唯讀權限；Windows 那支會實際安裝、啟動、覆蓋安裝、解除安裝；Linux 那支會在乾淨容器裡安裝）。
+   PR 頁面的 Checks → 該次執行 → Artifacts 可以下載產物到測試機驗收。
+2. **建立草稿**：合併進 `main` 後，在 Actions 手動執行 [`Release draft`](.github/workflows/release-draft.yml)，
+   輸入 `v` + pubspec 的 `X.Y.Z`（例如 `v1.0.0`）。它在同一個 commit 上重新建置兩個平台、比對 SHA256SUMS、
+   確認 tag 與 release 都還不存在，然後建立**草稿** release 並上傳安裝檔與 `SHA256SUMS.txt`。
+   草稿只有對 repo 有寫入權限的人看得到，tag 要到發佈時才建立。（`workflow_dispatch` 只認預設分支上的
+   workflow 檔，所以這步一定在合併之後。）
+3. **驗收後發佈**：從草稿頁下載資產，在乾淨的 Windows 11 x64 與 Ubuntu 24.04 x64 測試機完成下面的驗收關卡，
+   把結果寫進 release 說明，再在網頁上按 **Publish release**，或：
+
+   ```bash
+   gh release edit v1.0.0 --repo SheldonChangL/nook --draft=false
+   ```
+
+   發佈後任何人都能下載。草稿預設標為 pre-release；確定要當正式版再取消。
+
+安裝檔都**沒有程式碼簽章**（沒有憑證）。Windows 會出現 SmartScreen 警告，見下一節；發佈說明裡要寫明這一點。
+
+### Windows（未驗證）
+
+首批目標是 Windows 11 x64（安裝器允許 Windows 10 以上）。
+
+**安裝**：執行 `Nook-<版本>-windows-x64-setup.exe`。安裝器與程式都**沒有程式碼簽章**，SmartScreen 會顯示
+「Windows 已保護您的電腦」，要按「其他資訊」→「仍要執行」；發行者會顯示為「未知的發行者」。
+請只執行雜湊與 SHA256SUMS 相符的檔案。
+
+- 只裝給目前使用者，位置 `%LOCALAPPDATA%\Programs\Nook`，不需要系統管理員權限。管理員要裝給所有使用者
+  （`Program Files`，要 UAC）只能用命令列 `/ALLUSERS`，之後升級也要一直加 `/ALLUSERS`，不然會變成兩份安裝。
+- 建立開始功能表的 Nook 捷徑；桌面捷徑是可勾選的選項（預設不勾）。
+- 裝的是完整 Flutter Release 目錄（`nook.exe`、`flutter_windows.dll`、外掛 DLL、`data\`），加上 Visual C++
+  runtime 的三個 DLL（`msvcp140.dll`、`vcruntime140.dll`、`vcruntime140_1.dll`）放在 `nook.exe` 旁邊，
+  乾淨的 Windows 不必另裝 VC++ Redistributable。這三個 DLL 不會跟著 Windows Update 更新，靠 Nook 出新版帶新的。
+- **升級**：直接執行新版安裝器（同一個 AppId，會覆蓋舊版；Nook 還開著會要求先關閉）。
+- **解除安裝**：「設定」→「應用程式」→ Nook，或開始功能表。只移除程式與捷徑；
+  保險庫 `%APPDATA%\tw.com.jetopto\Nook\vault\` 不在安裝目錄裡，升級、重裝、解除安裝都不會動到。
+  真的要清掉資料，自己刪 `%APPDATA%\tw.com.jetopto\Nook`（先確定有備份）。
+- 內測用的 ZIP：解壓縮後執行 `Nook\nook.exe`，**整個資料夾要一起搬**；升級就是關掉 Nook、刪掉舊資料夾、
+  解壓新的。ZIP 與安裝器內容相同，不要兩種同時用，免得開到舊版。
+
+**自己建置**：建置機需要 Flutter 3.41.9、Visual Studio 2022（「使用 C++ 的桌面開發」）與
+[Inno Setup 7](https://jrsoftware.org/isdl.php)（只做 ZIP 可省略，加 `-SkipInstaller`）。
+
+```powershell
+flutter pub get
+powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1
+```
+
+產出 `dist\` 底下的安裝器、ZIP 與 `SHA256SUMS-windows.txt`。安裝器的設定在 `windows\installer\nook.iss`；
+其中的 `AppId` 是 Windows 認定「同一個程式」的依據，發佈後不能改，否則升級會變成裝兩份。
+
+**驗收關卡**（在乾淨、沒有 Flutter 的 Windows 11 x64 上；`scripts\smoke_test_windows_installer.ps1`
+會自動做前四項，CI 也跑同一支）：
+
+1. 安裝器靜默安裝成功，安裝目錄有完整 Release 目錄與 VC++ runtime，開始功能表捷徑指向 `nook.exe`。
+2. `nook.exe` 啟動後不會立刻結束，且在 `%APPDATA%\tw.com.jetopto\Nook\` 建立 `nook.lock`
+   （順便確認資料目錄就是上面寫的位置）。
+3. 覆蓋安裝（升級路徑）成功；用 `-PreviousInstaller` 可測從上一版升級。
+4. 解除安裝移除程式、捷徑與登錄，`%APPDATA%\tw.com.jetopto\Nook\` 原封不動。
+5. 人工：用測試用的假密碼建立保險庫、重開、解鎖、編輯、剪貼簿清除、最小化上鎖；升級到新版後用同一主密碼解鎖；
+   第二個執行個體停在「已經在執行」畫面；中文顯示正常；SmartScreen 警告與「仍要執行」流程如上。
+
+### Linux（Ubuntu 24.04 x64）
+
+建置機需要 Flutter 3.41.9 與：
+
+```bash
+sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev lld llvm-18 dpkg-dev
+```
+
+```bash
+flutter pub get && ./scripts/package_linux.sh
+```
+
+```bash
+sudo apt install ./dist/nook_1.0.0+1_amd64.deb   # arm64 機器上檔名是 _arm64
+sudo apt install ./nook_1.0.0-1_amd64.deb         # 從 Release 下載的檔名（+ 換成 -）
+```
+
+裝在 `/opt/nook/`，`nook` 指令與應用程式選單裡的 Nook 都指向它。升級一樣 `apt install`
+新的 `.deb`；移除用 `sudo apt remove nook`。保險庫在家目錄底下，升級或移除都不會動到。
+
 ---
 
 ## 使用
 
 第一次開會要你設主密碼。之後每次開都停在上鎖畫面。
+
+Windows／Linux 把下表的 `⌘` 換成 `Ctrl`。
 
 | 操作 | 做法 |
 |---|---|
@@ -127,6 +309,9 @@ ChaCha20-Poly1305 帶認證標籤，檔案被改過會驗證失敗，而不是�
   繼續顯示已經按過「顯示」的機密
 - **切換到其他 app 預設不會上鎖。** macOS 只要焦點離開就會回報 `hidden`，視窗根本不用被
   遮住，所以拿它當上鎖訊號的話，⌘Tab 一次就被鎖一次。要這個行為的話設定裡有開關，預設關著
+- 這個開關只在 Flutter 回報 `hidden`／`paused` 時上鎖，只失去焦點（`inactive`）不算。Windows／Linux
+  上焦點離開通常只會是 `inactive`，所以設定裡的標題寫成「視窗最小化或隱藏時立刻上鎖」，不宣稱切換焦點
+  會鎖。各平台實際何時回報 `hidden` 尚未在 Windows／Linux 實機確認
 - 機器睡著不需要特別處理：閒置判斷用的是真實經過時間，醒來第一次 tick 就會發現超時而上鎖
 - 上鎖時記憶體裡的金鑰與已解密的項目一起清掉
 - 複製後預設 30 秒清剪貼簿。**清之前會先確認剪貼簿裡還是我們放的那段**；你後來複製了別的東西就不會被吃掉
@@ -154,6 +339,7 @@ codesign -d --entitlements - /Applications/Nook.app
 
 ## Touch ID
 
+只有 macOS 版有（Windows／Linux 為什麼沒有，見「[平台支援](#平台支援)」）。
 預設關閉，要到「設定」自己開。
 
 開了之後，**主密碼仍然是唯一能解開資料的金鑰**。Touch ID 做的事是把資料金鑰（DEK）另外存一份在 macOS Keychain，通過生物辨識之後才拿出來用。
@@ -200,13 +386,30 @@ Team ID 上。現在是 ad-hoc 簽章，刻意不綁任何團隊帳號。
 
 ## 資料檔位置
 
-app 是沙盒化的，所以資料在 container 裡：
+macOS 的 app 是沙盒化的，所以資料在 container 裡：
 
 ```
 ~/Library/Containers/tw.com.jetopto.nook/Data/Library/Application Support/tw.com.jetopto.nook/vault/
 ```
 
-這串很長，所以「設定」裡有顯示完整路徑和一顆「複製路徑」。
+Windows 與 Linux：
+
+```
+%APPDATA%\tw.com.jetopto\Nook\vault\
+~/.local/share/tw.com.jetopto.nook/vault/
+```
+
+Windows 的路徑來自 `nook.exe` 版本資訊裡的公司名稱與產品名稱（`windows/runner/Runner.rc`），
+Linux 的來自應用程式 ID（`linux/CMakeLists.txt` 的 `APPLICATION_ID`）。改了這些，新版就會找不到
+舊資料，跟 macOS 改 bundle identifier 是同一件事。（Windows 這條是依 `path_provider_windows`
+的規則推得，還沒在 Windows 上實際確認。）
+
+Linux 版開啟時會嘗試把 `vault/` 收成 `0700`，同一台機器的其他帳號進不去。收完會重新讀一次權限確認；
+`chmod` 失敗、或指令回報成功但權限沒變（例如放在不支援 POSIX 權限的檔案系統上），設定頁「資料」區
+會顯示紅字警告並寫到 stderr，不會假裝已經收緊（解鎖照常，因為內容本身是加密的）。
+Windows 的 `%APPDATA%` 預設只有本人有權限，程式不另外調整 ACL。
+
+路徑都很長，所以「設定」裡有顯示完整路徑和一顆「複製路徑」。
 
 ---
 
@@ -233,6 +436,10 @@ cp -R "$VAULT" ~/Dropbox/securemanage-backup-$(date +%Y%m%d)
 把備份的 `vault/` 整個蓋回原位，用當時的主密碼解鎖。
 
 跨機器搬也是同一招：複製資料夾過去，在那台機器上用同一個主密碼解鎖就行。Touch ID 的設定不會跟著走，要在新機器上重新開。
+
+跨作業系統也一樣（例如 Mac 搬到 Linux）：檔案格式三個平台相同，把整個 `vault/` 複製到
+目標平台的資料目錄（見上面「資料檔位置」）即可。目標位置已經有保險庫的話，先把那份
+改名留著，不要直接蓋掉。
 
 ---
 
@@ -269,13 +476,26 @@ cp -R "$VAULT" ~/Dropbox/securemanage-backup-$(date +%Y%m%d)
 flutter test
 ```
 
-19 個測試，分成三層：
+64 個測試（含平台變體；macOS 上的數字），分成這幾層：
 
 - `test/vault_test.dart` — 加密與儲存層。建立／寫入／重開解鎖／讀回、密碼錯打不開、落地檔無明文、檔案被竄改會擋下、換主密碼、Touch ID 的 DEK 解鎖、Argon2id 耗時
 - `test/ui_flow_test.dart` — 驅動真實 UI 跑完整流程：建立保險庫 → 新增主機 → 上鎖 → 用錯密碼 → 用對密碼 → 讀回，以及閒置自動上鎖與密碼顯示切換
 - `test/idle_activity_test.dart` — 掛真正的 `NookApp`，確認鍵盤與對話框裡的操作
   都算活動、切換 app 預設不會上鎖、以及上鎖時對話框會被收掉。這幾個測試一定要用真的 app，
   自己兜簡化的 harness 會測到假的接線
+- `test/vault_fixture_test.dart` — 拿凍結的樣本保險庫 `test/fixtures/vault_v1/` 驗格式相容：
+  每個 `.item` 還是 `SM01`、整個資料夾複製到別處後用原主密碼解得開、在新位置改寫與換主密碼後
+  重開讀得回來、記憶體裡的 KDF 過期時存設定不會配錯 salt（先後執行的回歸測試）、同一程序裡換主密碼與
+  存設定同時發出會排隊、寫入不留暫存檔，以及 Linux 的 0700 權限（含 chmod 失敗、指令成功但權限沒變兩條
+  失敗路徑）。在哪個平台跑，就是在驗那個平台能打開別台產生的檔案。
+  樣本由 `tool/make_vault_fixture.dart` 產生，全是假資料；只有格式升版時才重產
+- `test/platform_test.dart` — 用 `TargetPlatformVariant` 模擬 Windows／Linux：快捷鍵改用 Ctrl、
+  設定頁沒有 Touch ID、快速解鎖不碰 local_auth 與安全儲存、生命週期上鎖的標題與行為一致（失去焦點不鎖、
+  隱藏才鎖）、Linux 的中文字型備援套到主題、等寬字與各畫面的每段中文。這只驗 Dart 端的分流，不能取代實機驗收
+- `test/instance_lock_test.dart` — 另開真的 Dart 程序（`test/support/hold_instance_lock.dart`）握鎖，
+  驗第二個程序拿不到、握鎖程序被強制終止後鎖會自動釋放、鎖檔開不了時不會被當成拿到鎖
+- `test/app_guard_test.dart` — 掛真正的 `NookApp`：拿不到鎖時停在「已經在執行」畫面且保險庫檔案完全沒被
+  讀寫、鎖檔放在 `vault/` 外面、權限收不緊時設定頁看得到警告
 
 UI 測試建立保險庫時用的是輕量 KDF 參數（`KdfParams.weakForTests`）。不這樣做的話，
 三個測試檔平行跑時每個都在算 128 MiB 的 Argon2，機器會被壓垮而出現一堆假的失敗。
@@ -349,6 +569,8 @@ icon 是用 CoreGraphics 直接畫出來的，沒有依賴任何設計工具，�
 
 這支會重算所有尺寸、放進 `macos/Runner/Assets.xcassets/AppIcon.appiconset/`，
 並產生一份 `design/out/Nook.icns`（給不經過 Xcode 打包的場合用，例如做 DMG）。
+同時產生 Windows 的 `windows/runner/resources/app_icon.ico`（`design/pack_ico.py` 把各尺寸的 PNG 原樣打包，不縮放）。
+Linux 的 `.deb` 直接取用 asset catalog 裡的 PNG。
 
 造型與顏色都在 [design/render_icon.swift](design/render_icon.swift)：
 深藍 squircle 底板加白色盾牌，盾牌上挖一個鑰匙孔。盾牌呼應 app 裡的鎖定圖示，

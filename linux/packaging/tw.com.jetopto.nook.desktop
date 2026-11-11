@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Nook
+GenericName=Secret Manager
+Comment=本機用的機密資料管理工具（金鑰、帳號、主機）
+Exec=/opt/nook/nook
+Icon=tw.com.jetopto.nook
+Terminal=false
+Categories=Utility;Security;
+Keywords=password;ssh;secret;vault;
+StartupNotify=true
+StartupWMClass=tw.com.jetopto.nook

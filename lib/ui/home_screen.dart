@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app/app_state.dart';
+import '../app/platform_profile.dart';
 import '../vault/models.dart';
 import 'command_palette.dart';
 import 'detail_panel.dart';
@@ -188,11 +189,12 @@ class _HomeScreenState extends State<HomeScreen> {
       data: _assetTheme(),
       child: Shortcuts(
         shortcuts: {
-          const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+          // macOS 是 ⌘，Windows／Linux 是 Ctrl。
+          PlatformProfile.current.shortcut(LogicalKeyboardKey.keyK):
               const _PaletteIntent(),
-          const SingleActivator(LogicalKeyboardKey.keyL, meta: true):
+          PlatformProfile.current.shortcut(LogicalKeyboardKey.keyL):
               const _LockIntent(),
-          const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
+          PlatformProfile.current.shortcut(LogicalKeyboardKey.keyN):
               const _NewIntent(),
         },
         child: Actions(
@@ -942,7 +944,9 @@ class _LockCountdown extends StatelessWidget {
     final soon = seconds <= 30;
     const danger = Color(0xFFE24B4A);
     return Tooltip(
-      message: '閒置滿 ${state.settings.autoLockSeconds ~/ 60} 分鐘自動上鎖．⌘L 立刻上鎖',
+      message:
+          '閒置滿 ${state.settings.autoLockSeconds ~/ 60} 分鐘自動上鎖．'
+          '${PlatformProfile.current.shortcutLabel('L')} 立刻上鎖',
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

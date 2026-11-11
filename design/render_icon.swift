@@ -75,7 +75,7 @@ func write(_ image: CGImage, to url: URL) {
 let args = CommandLine.arguments
 let outDir = URL(fileURLWithPath: args.count > 1 ? args[1] : "out")
 try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
-for pixelSize in [16, 32, 64, 128, 256, 512, 1024] {
+for pixelSize in [16, 24, 32, 48, 64, 128, 256, 512, 1024] {
     guard let image = renderIcon(size: CGFloat(pixelSize)) else { exit(1) }
     write(image, to: outDir.appendingPathComponent("app_icon_\(pixelSize).png"))
     print("app_icon_\(pixelSize).png")

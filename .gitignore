@@ -31,7 +31,10 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+# scripts/package_linux.sh、package_windows.ps1 的安裝包輸出
+/dist/
 /coverage/
+/.claude/worktrees/
 
 # Symbolication related
 app.*.symbols

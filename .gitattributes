@@ -1,0 +1,3 @@
+# 測試保險庫樣本要逐位元組保持原樣：Windows 上 core.autocrlf 會改寫 vault.json 的換行，
+# .item 若被誤判成文字也會被改壞，那「複製整個 vault/ 就能解鎖」的驗證就不成立了。
+test/fixtures/** -text

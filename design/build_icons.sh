@@ -35,5 +35,13 @@ cp "$OUT/app_icon_1024.png" "$TMP/icon_512x512@2x.png"
 iconutil -c icns "$TMP" -o "$OUT/Nook.icns"
 rm -rf "$(dirname "$TMP")"
 
+echo "做 Windows 的 .ico…"
+# Windows runner 編譯時會把這個檔嵌進 nook.exe。每個尺寸都是各自重畫的 PNG，
+# 不經縮放。Linux 安裝包直接取用上面 asset catalog 裡的 PNG，不需要另外產生。
+python3 -I design/pack_ico.py windows/runner/resources/app_icon.ico \
+  "$OUT/app_icon_16.png" "$OUT/app_icon_24.png" "$OUT/app_icon_32.png" \
+  "$OUT/app_icon_48.png" "$OUT/app_icon_64.png" "$OUT/app_icon_128.png" \
+  "$OUT/app_icon_256.png"
+
 echo "好了："
 ls -la "$OUT"

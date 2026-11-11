@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
+import '../app/platform_profile.dart';
 
 /// 動畫時長集中在這裡。這種每天開十幾次的工具，動畫寧可偏快。
 class Motion {
@@ -38,6 +39,7 @@ class AppTheme {
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
+      fontFamilyFallback: PlatformProfile.current.cjkFontFallback,
       scaffoldBackgroundColor: palette.background,
       visualDensity: VisualDensity.compact,
       dividerTheme: DividerThemeData(
@@ -96,6 +98,7 @@ class AppTheme {
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
+      fontFamilyFallback: PlatformProfile.current.cjkFontFallback,
       scaffoldBackgroundColor: isDark
           ? const Color(0xFF1C1C1E)
           : const Color(0xFFF6F6F4),
@@ -152,10 +155,22 @@ BoxDecoration panelDecoration(BuildContext context, {bool strong = false}) {
   );
 }
 
-/// 等寬字。硬寫 'Menlo' 在 macOS 沒問題，但之後移植到 Android 就沒這個字型，
-/// 所以留備援清單。
+/// 等寬字。硬寫 'Menlo' 在 macOS 沒問題，其他平台沒有這個字型，所以留備援清單：
+/// Windows 內建 Consolas，Ubuntu 預設有 DejaVu Sans Mono／Liberation Mono。
+/// 等寬欄位自己指定了 fontFamilyFallback，不會吃到主題的中文備援，所以這裡也要接上。
 const monoFamily = 'Menlo';
-const monoFallback = <String>['SF Mono', 'Courier New', 'monospace'];
+List<String> get monoFallback => [
+  ..._monoFallbackLatin,
+  ...PlatformProfile.current.cjkFontFallback,
+];
+const _monoFallbackLatin = <String>[
+  'SF Mono',
+  'Consolas',
+  'DejaVu Sans Mono',
+  'Liberation Mono',
+  'Courier New',
+  'monospace',
+];
 
 /// 給等寬欄位用的樣式。
 TextStyle monoStyle({double fontSize = 13, double? height, Color? color}) =>

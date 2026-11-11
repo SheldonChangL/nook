@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -56,10 +58,35 @@ class VaultSettings {
 ///
 /// 每筆一個檔是為了之後要做跨機同步時好合併，現在不實作同步，但格式先留著。
 class VaultStore {
-  VaultStore(this.root, {KdfParams Function()? kdfFactory})
-    : _kdfFactory = kdfFactory ?? KdfParams.fresh;
+  VaultStore(
+    this.root, {
+    KdfParams Function()? kdfFactory,
+    bool? ownerOnlyPermissions,
+    String chmodExecutable = '/bin/chmod',
+  }) : _kdfFactory = kdfFactory ?? KdfParams.fresh,
+       _ownerOnly = ownerOnlyPermissions ?? Platform.isLinux,
+       _chmod = chmodExecutable;
 
   final Directory root;
+
+  /// 把保險庫目錄收成只有自己能進（0700）。
+  ///
+  /// Linux 的 ~/.local/share 底下預設依 umask 建成 0755／0644，同機其他帳號
+  /// 讀得到密文與 vault.json。內容雖然都加密了，也沒理由讓別人拿去離線暴力破解。
+  /// macOS 有沙盒容器擋著、Windows 的 %APPDATA% 本來就只有本人有權限，所以預設
+  /// 只在 Linux 做；測試可以強制打開來驗證。
+  final bool _ownerOnly;
+
+  /// 只為了讓測試能換成會失敗的指令，驗證失敗真的會被看見。
+  final String _chmod;
+
+  /// 上一次收權限沒成功的原因；成功或不適用時是 null。設定頁會顯示它。
+  String? permissionProblem;
+
+  /// vault.json 的「讀出 → 改 → 寫回」在同一個程序裡也要排隊。
+  /// 換主密碼要算好幾百毫秒的 KDF，這段時間裡存設定若插隊，後寫的會蓋掉先寫的。
+  /// 跨程序的部分由 InstanceLock（單一執行個體）擋。
+  Future<void>? _manifestBusy;
 
   /// 怎麼產生新的 KDF 參數。預設是正式強度；UI 測試會換成輕量版，
   /// 不然幾個測試檔平行跑的時候每個都在算 128 MiB，機器會被壓垮。
@@ -94,12 +121,15 @@ class VaultStore {
   // ---------------------------------------------------------------- 建立
 
   /// 建立全新的保險庫。目錄已經有 vault.json 就拒絕，免得蓋掉現有資料。
-  Future<void> create(String password) async {
+  Future<void> create(String password) => _serialized(() => _create(password));
+
+  Future<void> _create(String password) async {
     if (exists) {
       throw const VaultOpenException('這個位置已經有保險庫了');
     }
     await root.create(recursive: true);
     await _itemsDir.create(recursive: true);
+    await restrictPermissions();
 
     final params = _kdfFactory();
     final kek = await VaultCrypto.deriveKek(password, params);
@@ -187,7 +217,10 @@ class VaultStore {
   // ---------------------------------------------------------------- 維護
 
   /// 換主密碼。只重新包一次 DEK，項目檔一個都不用動。
-  Future<void> changePassword(String oldPassword, String newPassword) async {
+  Future<void> changePassword(String oldPassword, String newPassword) =>
+      _serialized(() => _changePassword(oldPassword, newPassword));
+
+  Future<void> _changePassword(String oldPassword, String newPassword) async {
     final manifest = await _readManifest();
     final params = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
     final oldKek = await VaultCrypto.deriveKek(oldPassword, params);
@@ -202,9 +235,14 @@ class VaultStore {
     await _writeManifest(rewrapped);
   }
 
-  Future<void> saveSettings() async {
+  Future<void> saveSettings() => _serialized(_saveSettings);
+
+  Future<void> _saveSettings() async {
     final manifest = await _readManifest();
-    _kdfParams ??= KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
+    // KDF 參數一定要跟 wrappedDek 取自同一份 manifest。若沿用記憶體裡的舊值，
+    // 磁碟上的 manifest 被換過主密碼之後（例如從備份還原、或單一執行個體保護失效），
+    // 這裡會把舊 salt 配上新 wrappedDek 寫回去，新舊密碼就都打不開了。
+    _kdfParams = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
     await _writeManifest(base64Decode(manifest['wrappedDek'] as String));
   }
 
@@ -228,6 +266,45 @@ class VaultStore {
     _settings = VaultSettings.fromJson(
       manifest['settings'] as Map<String, dynamic>?,
     );
+  }
+
+  /// 保險庫目錄存在時把權限收成 0700。從別台機器複製過來的資料夾也一樣處理，
+  /// 所以開機時也會呼叫。
+  ///
+  /// 回傳 true 代表事後重新 stat 確認過權限就是 0700（或這個平台不適用）。
+  /// 不只看 chmod 的退出碼：指令「成功」但檔案系統不支援（例如掛載的 FAT／SMB）
+  /// 也會被抓到。失敗時回 false、把原因放進 [permissionProblem]，不擋解鎖 ——
+  /// 權限是額外的一層，不是加密本身 —— 但絕不假裝已經收緊。
+  ///
+  /// 刻意用同步的 runSync：chmod 只要幾毫秒，而非同步的 Process.run 在
+  /// widget test 的假時鐘下永遠不會完成，開機流程會卡在 loading（在 Linux 上實測踩到）。
+  Future<bool> restrictPermissions() async {
+    permissionProblem = null;
+    if (!_ownerOnly || !root.existsSync()) return true;
+    String? reason;
+    try {
+      final result = Process.runSync(_chmod, ['700', root.path]);
+      if (result.exitCode != 0) {
+        final err = '${result.stderr}'.trim();
+        reason =
+            'chmod 失敗（退出碼 ${result.exitCode}）${err.isEmpty ? '' : '：$err'}';
+      }
+    } on ProcessException catch (e) {
+      reason = '無法執行 chmod：${e.message}';
+    }
+    final mode = root.statSync().mode & 0x1FF; // 0777
+    if (reason == null && mode != 0x1C0) {
+      // 0700
+      reason = 'chmod 回報成功，但目錄權限仍是 ${mode.toRadixString(8).padLeft(3, '0')}';
+    }
+    if (reason != null) {
+      permissionProblem =
+          '保險庫資料夾沒能收成只限本人存取（0700）。$reason。'
+          '同一台機器的其他帳號可能讀得到密文，請手動確認權限。';
+      stderr.writeln('Nook: $permissionProblem');
+      return false;
+    }
+    return true;
   }
 
   // ---------------------------------------------------------------- 內部
@@ -276,11 +353,42 @@ class VaultStore {
     }
   }
 
+  /// 沒有人在改 manifest 時直接執行，不先等任何既有的 Future —— 預先建好的
+  /// Future 會綁在建立它的 zone 上，widget test 的假時鐘下會永遠等不到。
+  Future<T> _serialized<T>(Future<T> Function() action) async {
+    while (_manifestBusy != null) {
+      await _manifestBusy;
+    }
+    final done = Completer<void>();
+    _manifestBusy = done.future;
+    try {
+      return await action();
+    } finally {
+      _manifestBusy = null;
+      done.complete();
+    }
+  }
+
+  static final _tmpRandom = Random.secure();
+
   /// 先寫暫存檔再 rename，避免寫到一半斷電把原檔毀掉。
+  ///
+  /// 暫存檔名每次都不同（程序 ID＋亂數）：固定的 `.tmp` 會讓兩次寫入互相
+  /// 蓋掉或搶 rename。失敗時把暫存檔清掉，不留垃圾在保險庫裡。
   Future<void> _writeAtomic(File target, List<int> bytes) async {
-    final tmp = File('${target.path}.tmp');
-    await tmp.writeAsBytes(bytes, flush: true);
-    await tmp.rename(target.path);
+    final nonce = _tmpRandom.nextInt(1 << 32).toRadixString(16);
+    final tmp = File('${target.path}.$pid.$nonce.tmp');
+    try {
+      await tmp.writeAsBytes(bytes, flush: true);
+      await tmp.rename(target.path);
+    } catch (_) {
+      if (tmp.existsSync()) {
+        try {
+          tmp.deleteSync();
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app/app_state.dart';
+import '../app/platform_profile.dart';
 import 'theme.dart';
 import 'widgets/fields.dart';
 import 'widgets/motion.dart';
@@ -206,10 +207,13 @@ class _LockScreenState extends State<LockScreen> {
               // 淺色 mockup 的按鈕是沉一點的鋼藍配白字。
               backgroundColor: palette.dark ? null : const Color(0xFF3F86B6),
               foregroundColor: palette.dark ? null : Colors.white,
-              textStyle: const TextStyle(
+              // ButtonStyle 的 textStyle 會整個取代主題的 labelLarge，不會合併，
+              // 所以 Linux 的中文字型備援要自己帶上，不然按鈕字是方塊（.deb 實測）。
+              textStyle: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
+                fontFamilyFallback: PlatformProfile.current.cjkFontFallback,
               ),
             ),
             child: state.busy

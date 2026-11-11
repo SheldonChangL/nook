@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/biometric_gate.dart';
+import 'instance_lock.dart';
 import '../services/clipboard_guard.dart';
 import '../vault/models.dart';
 import '../vault/vault_crypto.dart';
@@ -22,18 +23,44 @@ enum VaultPhase {
 
   /// 解開了。
   unlocked,
+
+  /// 不能安全開啟：別的 Nook 正在用同一個保險庫，或連單一執行個體鎖都拿不到。
+  /// 這個狀態下完全不讀寫保險庫。原因在 [AppState.blockedReason]。
+  blocked,
 }
+
+/// 取得單一執行個體鎖。回 null 代表別的程序握著；丟例外代表鎖檔本身開不了。
+typedef InstanceLockAcquirer = InstanceLock? Function(Directory supportDir);
 
 class AppState extends ChangeNotifier {
   AppState({
     VaultStore? store,
     BiometricGate? biometrics,
     ClipboardGuard? clipboard,
+    InstanceLockAcquirer? acquireInstanceLock,
   }) : _injectedStore = store,
+       _acquireInstanceLock = acquireInstanceLock,
        biometrics = biometrics ?? BiometricGate(),
        clipboard = clipboard ?? ClipboardGuard();
 
   final VaultStore? _injectedStore;
+
+  /// 測試注入暫存目錄的 store 時預設不取鎖（測試可另外注入）；正式執行一定取。
+  final InstanceLockAcquirer? _acquireInstanceLock;
+
+  static InstanceLock? _defaultAcquire(Directory supportDir) =>
+      InstanceLock.tryAcquire(
+        File('${supportDir.path}${Platform.pathSeparator}nook.lock'),
+      );
+
+  /// 整個程序存活期間都握著，不主動釋放（程序結束時作業系統會收回）。
+  InstanceLock? instanceLock;
+
+  /// [VaultPhase.blocked] 時給使用者看的原因。
+  String? blockedReason;
+
+  /// 保險庫資料夾權限沒能收緊時的說明（只在 Linux 會檢查）。null 代表沒問題。
+  String? permissionWarning;
   final BiometricGate biometrics;
   final ClipboardGuard clipboard;
 
@@ -71,12 +98,43 @@ class AppState extends ChangeNotifier {
   VaultSettings get settings => store.settings;
 
   Future<void> boot() async {
+    final injected = _injectedStore;
+    final Directory? supportDir = injected == null
+        ? await getApplicationSupportDirectory()
+        : null;
+    final acquire =
+        _acquireInstanceLock ?? (injected == null ? _defaultAcquire : null);
+    if (acquire != null) {
+      // 先拿鎖再碰保險庫：拿不到就連讀都不讀，避免兩個程序交錯改寫 vault.json。
+      final dir = supportDir ?? injected!.root.parent;
+      try {
+        instanceLock = acquire(dir);
+        if (instanceLock == null) {
+          blockedReason =
+              'Nook 已經在執行中。請切換到已開啟的 Nook 視窗；'
+              '同時開兩個可能讓保險庫的設定或主密碼互相覆蓋。';
+        }
+      } on FileSystemException catch (e) {
+        blockedReason =
+            '無法建立單一執行個體鎖（${e.path ?? dir.path}：'
+            '${e.osError?.message ?? e.message}），為了不讓保險庫被同時改寫，'
+            '這次不開啟。';
+      }
+      if (blockedReason != null) {
+        phase = VaultPhase.blocked;
+        notifyListeners();
+        return;
+      }
+    }
+
+    // 用平台的路徑分隔符號，設定頁顯示、複製出去的路徑在 Windows 上才不會混著 / 與 \。
     store =
-        _injectedStore ??
+        injected ??
         VaultStore(
-          Directory('${(await getApplicationSupportDirectory()).path}/vault'),
+          Directory('${supportDir!.path}${Platform.pathSeparator}vault'),
         );
     final exists = store.exists;
+    if (exists) await _checkPermissions();
     phase = exists ? VaultPhase.locked : VaultPhase.needsSetup;
     notifyListeners();
 
@@ -94,11 +152,18 @@ class AppState extends ChangeNotifier {
     return _guard(() async {
       final preferredAppearance = darkAppearance;
       await store.create(password);
+      // create() 裡已經收過權限，這裡只把結果帶到畫面上。
+      permissionWarning = store.permissionProblem;
       settings.darkAppearance = preferredAppearance;
       if (!preferredAppearance) await store.saveSettings();
       _afterUnlock();
       return true;
     });
+  }
+
+  Future<void> _checkPermissions() async {
+    await store.restrictPermissions();
+    permissionWarning = store.permissionProblem;
   }
 
   Future<bool> unlock(String password) async {
@@ -196,6 +261,8 @@ class AppState extends ChangeNotifier {
   }
 
   void lock() {
+    // 被單一執行個體鎖擋下時根本沒有 store，也不能因為「上鎖」就跳到可以輸入主密碼的畫面。
+    if (phase == VaultPhase.blocked) return;
     _idleTimer?.cancel();
     _idleTimer = null;
     store.lock();

@@ -1,0 +1,94 @@
+# 在原生 x64 的 Ubuntu 24.04 runner 上測試、建置 Nook 的 amd64 .deb，檢查套件內容，在乾淨的 ubuntu:24.04 容器裡
+# 只靠套件依賴安裝一次，再連同 SHA256SUMS 上傳成 workflow artifact（要登入 GitHub 才能下載）。
+# 觸發方式與權限同 windows-installer.yml：PR、手動、被 release-draft.yml 呼叫；唯讀、不簽章、不發佈。
+# 容器安裝不等於實體桌面驗收；互動流程仍要在測試機做（見 CROSS_PLATFORM_INSTALL_PLAN.md）。
+name: Linux deb
+
+on:
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'linux/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'SecureManage_UI_Assets/**'
+      - '.gitattributes'
+      - 'scripts/package_linux.sh'
+      # .deb 的圖示取自 macOS asset catalog（package_linux.sh）。
+      - 'macos/Runner/Assets.xcassets/AppIcon.appiconset/**'
+      - '.github/workflows/linux-deb.yml'
+      - '.github/workflows/release-draft.yml'
+  workflow_dispatch:
+  # release-draft.yml 重用這裡的建置；產物在同一次執行裡交給建立草稿的 job。
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # 不用 github.workflow：被 release-draft.yml 呼叫時那是呼叫端的名字，兩支建置會搶同一個群組互相取消。
+  group: linux-deb-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev lld llvm-18 dpkg-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.9
+
+      - name: Flutter checks
+        run: |
+          flutter --version
+          flutter pub get
+          flutter analyze
+          flutter test --concurrency=1
+
+      - name: Build and package
+        run: ./scripts/package_linux.sh
+
+      - name: Inspect package and write checksums
+        working-directory: dist
+        run: |
+          ls -l nook_*_amd64.deb
+          dpkg-deb --info nook_*_amd64.deb
+          contents="$(dpkg-deb --contents nook_*_amd64.deb)"
+          for path in ./opt/nook/nook ./opt/nook/data/icudtl.dat ./opt/nook/lib/libapp.so \
+              ./usr/bin/nook ./usr/share/applications/tw.com.jetopto.nook.desktop; do
+            grep -qF " $path" <<<"$contents" || { echo "套件缺 $path" >&2; exit 1; }
+          done
+          sha256sum nook_*_amd64.deb > SHA256SUMS-linux.txt
+          cat SHA256SUMS-linux.txt
+
+      - name: Install in a clean Ubuntu 24.04 container
+        run: |
+          # 乾淨容器沒有 Flutter、GTK、EGL、CJK 字型；只靠 .deb 的 Depends 帶進來，再確認執行檔沒有缺函式庫。
+          docker run --rm -v "$PWD/dist:/dist:ro" ubuntu:24.04 bash -euo pipefail -c '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends /dist/nook_*_amd64.deb
+            test -x /opt/nook/nook && test -L /usr/bin/nook
+            out="$(ldd /opt/nook/nook)"
+            if grep -q "not found" <<<"$out"; then grep "not found" <<<"$out"; exit 1; fi
+            dpkg -s nook | sed -n "1,/^Depends/p"
+          '
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: nook-linux-amd64
+          path: |
+            dist/nook_*_amd64.deb
+            dist/SHA256SUMS-linux.txt
+          if-no-files-found: error
+          retention-days: 30

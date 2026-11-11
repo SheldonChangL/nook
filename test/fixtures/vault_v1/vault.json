@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "kdf": {
+    "algorithm": "argon2id",
+    "memory": 256,
+    "iterations": 1,
+    "parallelism": 1,
+    "salt": "I5RRIWgOptcof8KT6iVbZg=="
+  },
+  "wrappedDek": "U00wMVPdJesmezDaeGQGyZkhwMwhUW5apVxPRuWoA9kDl33k9LJdVHzIO3rqRrfHVLmSc3OV6bl3HbNql9kFRg==",
+  "settings": {
+    "autoLockSeconds": 300,
+    "clipboardClearSeconds": 30,
+    "biometricEnabled": false,
+    "lockOnAppSwitch": false,
+    "darkAppearance": true
+  }
+}

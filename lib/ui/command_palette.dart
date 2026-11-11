@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/app_state.dart';
+import '../app/platform_profile.dart';
 import '../vault/models.dart';
 import 'theme.dart';
 import 'widgets/motion.dart';
@@ -116,7 +117,7 @@ class _CommandPaletteState extends State<_CommandPalette> {
           const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1),
           const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1),
           const SingleActivator(LogicalKeyboardKey.enter): _copySelected,
-          const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+          PlatformProfile.current.shortcut(LogicalKeyboardKey.enter):
               _openSelected,
           const SingleActivator(LogicalKeyboardKey.escape): () =>
               Navigator.pop(context),
@@ -217,7 +218,9 @@ class _CommandPaletteState extends State<_CommandPalette> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 8),
                   child: Row(children: [
-                    Text('↑↓ 選擇　⏎ 複製　⌘⏎ 開啟　esc 關閉',
+                    Text(
+                        '↑↓ 選擇　⏎ 複製　'
+                        '${PlatformProfile.current.shortcutLabel('⏎')} 開啟　esc 關閉',
                         style: TextStyle(
                             fontSize: 11, color: scheme.onSurfaceVariant)),
                   ]),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/app_state.dart';
+import '../app/platform_profile.dart';
 import 'widgets/fields.dart';
 
 Future<void> showSettingsSheet(BuildContext context,
@@ -116,18 +117,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                         await state.setLockOnAppSwitch(v);
                         setState(() {});
                       },
-                      title: const Text('切換到其他 app 就立刻上鎖',
-                          style: TextStyle(fontSize: 13)),
+                      title: Text(PlatformProfile.current.appSwitchTitle,
+                          style: const TextStyle(fontSize: 13)),
                       subtitle: Text(
-                        'macOS 只要焦點離開就算切換，所以開了之後每次 ⌘Tab 都會被鎖，'
-                        '要重打主密碼。閒置自動上鎖本來就擋得住離開座位的情況，'
-                        '除非你的螢幕常被旁人看到，否則不建議開。',
+                        PlatformProfile.current.appSwitchHint,
                         style: TextStyle(
                             fontSize: 11,
                             height: 1.5,
                             color: scheme.onSurfaceVariant),
                       ),
                     ),
+                    // 快速解鎖只在 macOS 有受保護的金鑰設計（Touch ID＋Keychain）。
+                    // Windows／Linux 不顯示這個開關，免得讓人以為 DEK 有被系統驗證綁住。
+                    if (PlatformProfile.current.supportsQuickUnlock)
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
@@ -189,6 +191,16 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             style: const TextStyle(fontSize: 12)),
                       ),
                     ]),
+                    if (state.permissionWarning != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(state.permissionWarning!,
+                            key: const ValueKey('permission-warning'),
+                            style: TextStyle(
+                                fontSize: 12,
+                                height: 1.5,
+                                color: scheme.error)),
+                      ),
                     const SizedBox(height: 10),
                     Text(
                       '備份就是把整個資料夾複製走。裡面全是密文，放哪都不會外洩內容，'
@@ -229,8 +241,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           value: options.containsKey(value) ? value : options.keys.first,
           isDense: true,
           underline: const SizedBox.shrink(),
+          // DropdownButton 的 style 會取代而不是合併預設字型樣式，Linux 的中文備援要自己帶。
           style: TextStyle(
-              fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurface,
+              fontFamilyFallback: PlatformProfile.current.cjkFontFallback),
           items: [
             for (final entry in options.entries)
               DropdownMenuItem(value: entry.key, child: Text(entry.value)),

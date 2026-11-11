@@ -1,0 +1,98 @@
+# 在 Windows runner 上測試、建置、封裝 Nook 的安裝器與 ZIP，實際安裝／啟動／覆蓋安裝／解除安裝一遍，
+# 再把安裝器、ZIP、SHA256SUMS 上傳成 workflow artifact（要登入 GitHub 才能下載，只給開發與驗收用）。
+# 觸發：PR（改到相關檔案時，PR 分支上就能跑，不必先進 main）、手動（檔案要在預設分支上）、
+# 被 release-draft.yml 呼叫。這支只有唯讀權限：不簽章、不建立 Release、不發佈。
+name: Windows installer
+
+on:
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'windows/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'SecureManage_UI_Assets/**'
+      - '.gitattributes'
+      - 'scripts/package_windows.ps1'
+      - 'scripts/smoke_test_windows_installer.ps1'
+      - '.github/workflows/windows-installer.yml'
+      - '.github/workflows/release-draft.yml'
+  workflow_dispatch:
+  # release-draft.yml 重用這裡的建置；產物在同一次執行裡交給建立草稿的 job。
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # 不用 github.workflow：被 release-draft.yml 呼叫時那是呼叫端的名字，兩支建置會搶同一個群組互相取消。
+  group: windows-installer-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    # 固定 windows-2022：上面是 Visual Studio 2022，與 README 的建置需求一致。
+    # windows-2025／windows-latest 已改成 Visual Studio 2026，Flutter 3.41.9 在那上面沒驗過。
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      INNO_SETUP_URL: https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe
+      # 2026-11-11 從上面網址下載後自己算的 SHA256（官方沒有公布雜湊）；換版本時一起改。
+      INNO_SETUP_SHA256: 8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.9
+
+      - name: Install Inno Setup 7
+        run: |
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest -Uri $env:INNO_SETUP_URL -OutFile $setup
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant()
+          if ($hash -ne $env:INNO_SETUP_SHA256) { throw "Inno Setup 安裝檔 SHA256 不符：$hash" }
+          $dir = Join-Path $env:RUNNER_TEMP 'InnoSetup7'
+          $proc = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"")
+          if ($proc.ExitCode -ne 0) { throw "Inno Setup 安裝失敗（$($proc.ExitCode)）" }
+          $iscc = Join-Path $dir 'ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "找不到 $iscc" }
+          "NOOK_ISCC=$iscc" >> $env:GITHUB_ENV
+
+      - name: Flutter checks
+        run: |
+          flutter --version
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw 'flutter pub get 失敗' }
+          flutter analyze
+          if ($LASTEXITCODE -ne 0) { throw 'flutter analyze 失敗' }
+          flutter test --concurrency=1
+          if ($LASTEXITCODE -ne 0) { throw 'flutter test 失敗' }
+
+      - name: Build and package
+        run: ./scripts/package_windows.ps1
+
+      - name: Install, launch, reinstall, uninstall
+        run: |
+          $setup = Get-ChildItem dist -Filter 'Nook-*-windows-x64-setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw '找不到安裝器' }
+          ./scripts/smoke_test_windows_installer.ps1 -Installer $setup.FullName
+
+      - name: Show checksums
+        run: Get-Content dist/SHA256SUMS-windows.txt
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: nook-windows-x64
+          path: |
+            dist/Nook-*-windows-x64-setup.exe
+            dist/Nook-*-windows-x64.zip
+            dist/SHA256SUMS-windows.txt
+          if-no-files-found: error
+          retention-days: 30

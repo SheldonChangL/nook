@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app/app_state.dart';
+import 'app/platform_profile.dart';
 import 'ui/home_screen.dart';
 import 'ui/lock_screen.dart';
 import 'ui/theme.dart';
@@ -58,6 +59,9 @@ class _NookAppState extends State<NookApp> with WidgetsBindingObserver {
   void _syncWindowMode() {
     // 測試注入的狀態沒有原生 Runner，不應呼叫 platform channel。
     if (widget.state != null) return;
+    // 只有 macOS runner 實作了這個通道。Windows／Linux 用固定的初始視窗尺寸，
+    // 標題列跟著系統外觀，關窗就結束程式（重新開啟時一定停在上鎖畫面）。
+    if (!PlatformProfile.current.hasWindowChannel) return;
     final compact = _state.phase != VaultPhase.unlocked;
     if (_lastCompactWindow != compact) {
       _lastCompactWindow = compact;
@@ -89,6 +93,7 @@ class _NookAppState extends State<NookApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     if (_state.phase != VaultPhase.unlocked) return;
     // macOS 只要焦點切到別的 app 就會送 hidden，視窗根本不用被遮住（實測過）。
+    // Windows／Linux 送出 hidden 的時機依視窗系統而定（通常是最小化），未經實機確認。
     // 所以預設不靠生命週期上鎖，不然 ⌘Tab 一次就鎖一次，完全沒辦法用。
     // 要這個行為的人自己去設定裡開。
     //
@@ -150,7 +155,58 @@ class _NookAppState extends State<NookApp> with WidgetsBindingObserver {
             key: const ValueKey('home'),
             state: _state,
           ),
+          VaultPhase.blocked => _BlockedScreen(
+            message: _state.blockedReason ?? 'Nook 這次不能安全開啟。',
+          ),
         },
+      ),
+    );
+  }
+}
+
+/// 不能安全開啟時（多半是已經有一個 Nook 開著）的畫面。不碰保險庫，只說明原因。
+class _BlockedScreen extends StatelessWidget {
+  const _BlockedScreen({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      key: const ValueKey('blocked'),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_clock_outlined,
+                  size: 32,
+                  color: scheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.6,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => SystemNavigator.pop(),
+                  child: const Text('關閉'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

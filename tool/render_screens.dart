@@ -68,7 +68,8 @@ void main() {
           builder: (context, _) => DefaultTextStyle.merge(
             style: const TextStyle(fontFamily: 'RenderCJK'),
             child: switch (state.phase) {
-              VaultPhase.loading => const SizedBox.shrink(),
+              VaultPhase.loading || VaultPhase.blocked =>
+                const SizedBox.shrink(),
               VaultPhase.needsSetup || VaultPhase.locked =>
                 LockScreen(state: state),
               VaultPhase.unlocked => HomeScreen(state: state),

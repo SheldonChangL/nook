@@ -3,17 +3,27 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../app/platform_profile.dart';
+
 /// Touch ID 解鎖。
 ///
 /// 要講清楚它保護到什麼程度：主密碼仍然是唯一能解開資料的金鑰，這裡只是把
 /// 資料金鑰（DEK）另外存一份在 macOS Keychain，通過 Touch ID 之後才拿出來用。
 /// Keychain 那份是綁在你的 macOS 帳號下的，所以「你的 Mac 已登入且被別人碰到」
 /// 這個情境下，它的保護力比主密碼弱。預設關閉，要自己去設定裡開。
+///
+/// 只有 macOS 啟用（見 [PlatformProfile.supportsQuickUnlock]）。Windows／Linux
+/// 上所有查詢一律回「沒有」，也不會碰 local_auth 或安全儲存的通道 ——
+/// Windows Hello 不會綁住存起來的 DEK，Linux 沒有 local_auth 實作，
+/// 在另行設計金鑰保護之前不能把它們包裝成「快速解鎖」。
 class BiometricGate {
   BiometricGate({
     LocalAuthentication? auth,
     FlutterSecureStorage? storage,
-  })  : _auth = auth ?? LocalAuthentication(),
+    bool? platformSupported,
+  })  : _platformSupported =
+            platformSupported ?? PlatformProfile.current.supportsQuickUnlock,
+        _auth = auth ?? LocalAuthentication(),
         _storage = storage ??
             const FlutterSecureStorage(
               mOptions: MacOsOptions(
@@ -28,6 +38,7 @@ class BiometricGate {
               ),
             );
 
+  final bool _platformSupported;
   final LocalAuthentication _auth;
   final FlutterSecureStorage _storage;
 
@@ -45,8 +56,9 @@ class BiometricGate {
     }
   }
 
-  /// 這台機器有沒有 Touch ID 可用。
+  /// 這台機器有沒有 Touch ID 可用。不支援的平台直接回 false，不探測。
   Future<bool> get isAvailable => _probe(() async {
+        if (!_platformSupported) return false;
         if (!await _auth.isDeviceSupported()) return false;
         final kinds = await _auth.getAvailableBiometrics();
         return kinds.contains(BiometricType.strong) ||
@@ -54,12 +66,15 @@ class BiometricGate {
             kinds.contains(BiometricType.face);
       }, false);
 
-  Future<bool> get hasStoredKey =>
-      _probe(() async => (await _storage.read(key: _dekKey)) != null, false);
+  Future<bool> get hasStoredKey => _probe(() async {
+        if (!_platformSupported) return false;
+        return (await _storage.read(key: _dekKey)) != null;
+      }, false);
 
   /// 開啟 Touch ID：先驗一次生物辨識，過了才把 DEK 放進 Keychain。
   /// 回 null 表示成功，否則是給使用者看的失敗原因。
   Future<String?> enroll(List<int> dek) async {
+    if (!_platformSupported) return '這個平台沒有提供快速解鎖，請用主密碼';
     if (!await _authenticate('確認是本人，才會把解鎖金鑰交給 Touch ID')) {
       return 'Touch ID 沒有通過，維持關閉';
     }
@@ -79,11 +94,13 @@ class BiometricGate {
 
   /// 關閉 Touch ID，把 Keychain 裡那份刪掉。
   Future<void> forget() async {
+    if (!_platformSupported) return;
     await _storage.delete(key: _dekKey);
   }
 
   /// Touch ID 解鎖。沒通過或 Keychain 裡沒東西就回 null，呼叫端退回主密碼。
   Future<List<int>?> unlock() async {
+    if (!_platformSupported) return null;
     final stored = await _storage.read(key: _dekKey);
     if (stored == null) return null;
     if (!await _authenticate('用 Touch ID 解鎖 Nook')) return null;

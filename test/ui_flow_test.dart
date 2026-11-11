@@ -73,7 +73,7 @@ void main() {
     home: ListenableBuilder(
       listenable: state,
       builder: (context, _) => switch (state.phase) {
-        VaultPhase.loading => const SizedBox.shrink(),
+        VaultPhase.loading || VaultPhase.blocked => const SizedBox.shrink(),
         VaultPhase.needsSetup || VaultPhase.locked => LockScreen(
           key: const ValueKey('lock'),
           state: state,

@@ -249,7 +249,7 @@ void main() {
     await a.sync();
     final left = Directory('${cloud.path}/items')
         .listSync()
-        .map((e) => e.path.split('/').last)
+        .map((e) => e.path.split(RegExp(r'[/\\]')).last)
         .where((n) => n.startsWith(id))
         .toList();
     expect(left, ['$id.item'], reason: '只留正名的檔');

@@ -458,11 +458,14 @@ class SyncEngine {
     }
 
     // 雲端只留一份正名的檔案，內容就是贏的那份。
-    final canonicalPath = File('${_itemsDir.path}/$id.item').path;
+    // 用檔名比，不用完整路徑：Windows 上 listSync 回傳的路徑用 \ 分隔，
+    // 這裡拼出來的是 /，整串比永遠不相等 —— 正名檔會被當成衝突檔刪掉（CI 實測）。
+    final canonicalName = '$id.item';
+    final canonicalFile = File('${_itemsDir.path}/$canonicalName');
     if (winner != null) {
       _RemoteVersion? atCanonical;
       for (final v in variants) {
-        if (v.file.path == canonicalPath) atCanonical = v;
+        if (_basename(v.file.path) == canonicalName) atCanonical = v;
       }
       final upToDate = atCanonical != null &&
           atCanonical.updatedAt.isAtSameMomentAs(winner.updatedAt) &&
@@ -477,11 +480,11 @@ class SyncEngine {
       }
     } else {
       // 這筆沒了：雲端剩下的是刪除前的舊版，清掉，免得之後被當成新項目拉回來。
-      await _tryDelete(File(canonicalPath));
+      await _tryDelete(canonicalFile);
     }
     // 其餘變體（雲端服務另存的衝突檔）內容已經合併或另存了。
     for (final v in variants) {
-      if (v.file.path != canonicalPath) await _tryDelete(v.file);
+      if (_basename(v.file.path) != canonicalName) await _tryDelete(v.file);
     }
     return _Outcome(
       winner?.updatedAt,

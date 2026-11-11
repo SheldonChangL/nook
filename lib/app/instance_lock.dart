@@ -30,7 +30,8 @@ import 'package:ffi/ffi.dart';
 ///   成敗看 LockFileEx 的回傳值，不靠 GetLastError（理由見 [_Win32]）。
 ///
 /// 限制：網路磁碟上的家目錄是否尊重檔案鎖，依檔案系統而定，未驗證。
-/// Windows 這一支尚未在 Windows 上建置或執行過。
+/// Windows 這一支已在 Windows Server 2022 CI 建置並通過跨程序鎖測試；
+/// Windows 11 實體桌面尚未驗收。
 class InstanceLock {
   InstanceLock._(this.file, this._handle);
 

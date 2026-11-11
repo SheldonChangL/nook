@@ -47,7 +47,9 @@ Release 版的 entitlements 裡沒有任何網路權限。Windows 與 Linux 沒�
 | 程式碼簽章 | 本機 ad-hoc | **無**（SmartScreen 會警告） | 無（`.deb` 未簽） |
 | 作業系統層級的網路隔離 | App Sandbox | 無 | 無 |
 | 同時開多個執行個體 | 擋下（見下） | 擋下（見下） | 擋下（見下） |
-| 驗收狀態 | 實機使用中 | **未驗證**：安裝器與 workflow 已寫好，尚未在 Windows 上建置、安裝或執行過 | amd64／arm64 都只在容器內驗過，**沒有**實體桌面驗收，見下方 |
+| 驗收狀態 | 實機使用中 | Windows Server 2022 CI 已建置、安裝、啟動、重裝、解除安裝；**沒有** Windows 11 實體桌面驗收 | amd64／arm64 都只在容器內驗過，**沒有**實體桌面驗收，見下方 |
+
+Windows 版的驗收狀態：2026-11-11 的 [PR #1](https://github.com/SheldonChangL/nook/pull/1) 在 Windows Server 2022 runner 通過 `flutter analyze`、58 項測試（另 6 項略過）、Release 建置及 Inno Setup 封裝；自動測試完成安裝、啟動、覆蓋安裝、解除安裝，並確認資料目錄保留。CI 產物的 SHA256 已在本機核對。Windows 11 實體桌面的中文顯示、主密碼操作、SmartScreen、睡眠喚醒與升級舊版本仍待驗收；目前尚未公開發佈。
 
 Linux 版的驗收狀態（都是 Docker 容器，不是實體桌面）：
 

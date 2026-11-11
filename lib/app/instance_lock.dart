@@ -26,8 +26,8 @@ import 'package:ffi/ffi.dart';
 /// 所以這裡直接用 dart:ffi 呼叫系統 API，拿到的是 GC 管不到的原始 fd／HANDLE：
 /// - POSIX（Linux、macOS）：`open` ＋ `flock(LOCK_EX | LOCK_NB)`。flock 綁在開啟的
 ///   檔案描述上，同一個程序開兩次也會互斥，測試在同程序內就驗得到。
-/// - Windows：`CreateFileW` 不給任何共用權限（dwShareMode = 0）。別的程序再開同一個
-///   檔案會得到共用違規。
+/// - Windows：`CreateFileW` 開檔＋`LockFileEx(EXCLUSIVE | FAIL_IMMEDIATELY)`。
+///   成敗看 LockFileEx 的回傳值，不靠 GetLastError（理由見 [_Win32]）。
 ///
 /// 限制：網路磁碟上的家目錄是否尊重檔案鎖，依檔案系統而定，未驗證。
 /// Windows 這一支尚未在 Windows 上建置或執行過。
@@ -117,7 +117,21 @@ class _Posix {
   static void release(int fd) => _close(fd);
 }
 
-/// CreateFileW／CloseHandle／GetLastError（kernel32）。
+/// CreateFileW／LockFileEx／CloseHandle（kernel32）。
+///
+/// 為什麼不靠 CreateFileW 的共用違規判斷「別人握著」：要區分「被占用」跟「真的
+/// 開不了」得看 GetLastError，但 Dart VM 在兩次 FFI 呼叫之間會跑自己的 Win32
+/// 呼叫（例如 TlsGetValue 成功時會把 last error 設回 0），事後再用 FFI 取
+/// GetLastError 讀到的常常是 0。Windows CI 實測就是這樣：別的程序握著鎖時，
+/// 拿到的是「Win32 錯誤碼 0」的例外，而不是 null。
+///
+/// 所以改成跟 POSIX 一樣的兩段式：
+/// 1. CreateFileW 允許讀寫共用（不允許刪除共用，免得鎖檔被刪掉重建後兩邊各鎖
+///    一份）。這一步不會因為別人握著而失敗，失敗就是真的開不了 → 丟例外。
+/// 2. LockFileEx（獨占、FAIL_IMMEDIATELY）鎖整個範圍。成敗只看回傳值，不用
+///    GetLastError；失敗就是有別的 handle 握著 → 回 null。
+/// 鎖綁在 handle 上：同一程序開第二個 handle 也鎖不到；handle 關閉或程序結束時
+/// 由系統釋放。
 class _Win32 {
   static final _kernel32 = DynamicLibrary.open('kernel32.dll');
 
@@ -134,6 +148,11 @@ class _Win32 {
         ),
         int Function(Pointer<Utf16>, int, int, Pointer<Void>, int, int, int)
       >('CreateFileW');
+  static final _lockFileEx = _kernel32
+      .lookupFunction<
+        Int32 Function(IntPtr, Uint32, Uint32, Uint32, Uint32, Pointer<Void>),
+        int Function(int, int, int, int, int, Pointer<Void>)
+      >('LockFileEx');
   static final _closeHandle = _kernel32
       .lookupFunction<Int32 Function(IntPtr), int Function(int)>('CloseHandle');
   static final _getLastError = _kernel32
@@ -141,10 +160,17 @@ class _Win32 {
 
   static const _genericRead = 0x80000000;
   static const _genericWrite = 0x40000000;
+  static const _fileShareRead = 0x1;
+  static const _fileShareWrite = 0x2;
   static const _openAlways = 4;
   static const _fileAttributeNormal = 0x80;
   static const _invalidHandle = -1;
   static const _errorSharingViolation = 32;
+  static const _lockfileFailImmediately = 0x1;
+  static const _lockfileExclusiveLock = 0x2;
+
+  /// OVERLAPPED 在 32／64 位元下是 20／32 bytes；配 32 bytes 全零 = 從位移 0 鎖起。
+  static const _overlappedSize = 32;
 
   static int? tryAcquire(String path) {
     final wPath = path.toNativeUtf16();
@@ -154,24 +180,49 @@ class _Win32 {
       handle = _createFile(
         wPath,
         _genericRead | _genericWrite,
-        0, // 不共用：別的程序開不了這個檔案
+        _fileShareRead | _fileShareWrite,
         nullptr,
         _openAlways,
         _fileAttributeNormal,
         0,
       );
+      // 只拿來寫進錯誤訊息（理由見類別說明，這個值不可靠）。
       error = handle == _invalidHandle ? _getLastError() : 0;
     } finally {
       malloc.free(wPath);
     }
-    if (handle != _invalidHandle) return handle;
-    if (error == _errorSharingViolation) return null;
-    throw FileSystemException(
-      '無法開啟鎖檔',
-      path,
-      OSError('Win32 錯誤碼 $error', error),
-    );
+    if (handle == _invalidHandle) {
+      // 舊版（dwShareMode = 0）的 Nook 還開著時會撞到共用違規；剛好讀得到就照實
+      // 回報「被占用」，其餘一律當成開不了，不能當成拿到鎖。
+      if (error == _errorSharingViolation) return null;
+      throw FileSystemException(
+        '無法開啟鎖檔',
+        path,
+        OSError('Win32 錯誤碼 $error（可能不準確）', error),
+      );
+    }
+
+    final overlapped = calloc<Uint8>(_overlappedSize);
+    final int locked;
+    try {
+      locked = _lockFileEx(
+        handle,
+        _lockfileExclusiveLock | _lockfileFailImmediately,
+        0,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        overlapped.cast(),
+      );
+    } finally {
+      calloc.free(overlapped);
+    }
+    if (locked == 0) {
+      _closeHandle(handle);
+      return null;
+    }
+    return handle;
   }
 
+  /// 關掉 handle 時，系統會一併解除這個 handle 上的鎖。
   static void release(int handle) => _closeHandle(handle);
 }

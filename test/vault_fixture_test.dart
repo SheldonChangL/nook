@@ -190,8 +190,11 @@ void main() {
     );
     await store.unlock(fixturePassword);
     // 舊版固定寫 vault.json.tmp；若有殘留檔佔著那個名字，新版也不能受影響。
-    final legacyTmp = File('${copied.path}/vault.json.tmp')
-      ..writeAsStringSync('leftover');
+    // 用平台分隔符組路徑：Windows 上 listSync 回的是 `\`，混用 `/` 下面的路徑
+    // 比對會對不上，把這個刻意放的殘留檔誤判成新留下的暫存檔。
+    final legacyTmp = File(
+      '${copied.path}${Platform.pathSeparator}vault.json.tmp',
+    )..writeAsStringSync('leftover');
     await Future.wait([
       for (var i = 0; i < 8; i++) store.saveSettings(),
       for (final item in store.items) store.put(item, bumpUpdated: false),

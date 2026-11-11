@@ -318,3 +318,57 @@ Linux amd64 驗證（由 Codex 在 jetubuntu 進行，原生 x86_64 主機上的
 - [Windows run 42965527686](https://github.com/SheldonChangL/nook/actions/runs/42965527686)：Windows Server 2022 上 `flutter analyze` 通過、58 項測試通過（6 項略過）、`flutter build windows --release` 成功；產出 `Nook-1.0.0-1-windows-x64-setup.exe` 與 ZIP。冒煙測試實際安裝、啟動、覆蓋安裝、解除安裝，確認程式和捷徑移除、資料目錄保留。下載 artifact 後在本機比對 SHA256，兩個檔案皆通過。
 - [Linux run 42965527828](https://github.com/SheldonChangL/nook/actions/runs/42965527828)：Ubuntu 24.04 x64 上分析、測試、Release 建置、`.deb` 封裝與乾淨容器安裝全綠；下載後在本機比對 SHA256 通過。
 - 工作流 artifact 供驗收使用，公開 Releases 仍未建立。Windows 11 x64 與 Ubuntu 24.04 x64 實體桌面的人機互動驗收尚未完成；依上述發行關卡，不能宣稱正式支援或公開發佈。
+
+### 2026-11-11（Ubuntu 22.04 相容性：建置改在 22.04 容器）
+
+起因：把 PR #1 產出的 `.deb`（Ubuntu 24.04 runner 上建）裝到 jetubuntu（Ubuntu 22.04.5、glibc 2.35）後
+`apt` 裝得上去，執行卻是：
+
+```
+/opt/nook/nook: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
+  (required by /opt/nook/lib/libflutter_secure_storage_linux_plugin.so)
+```
+
+逐檔檢查 bundle 的符號版本需求，只有 `libflutter_secure_storage_linux_plugin.so` 要 GLIBC_2.38
+（`nook` 2.34、`libflutter_linux_gtk.so` 2.18），卡住的符號是 `__isoc23_strtoll` / `__isoc23_strtoull` ——
+不是外掛真的用到新功能，是 glibc 2.38 以上的 header 把 `strtoll` 重導過去，純粹是「在哪台機器編的」留下的痕跡。
+`.deb` 的 `Depends` 當時只寫 `libc6` 沒有版本下限（control 是手寫的，不是 `dpkg-shlibdeps` 產生），
+所以 apt 無從擋起，裝完才在啟動時掛掉。`package_linux.sh` 原本的 `ldd` 檢查抓不到：它只驗「函式庫找不到」，
+而且是在 24.04 的建置機上跑的。
+
+修正（支援範圍定為 Ubuntu 22.04 以上）：
+
+- `linux/packaging/build.Dockerfile`（新增）：Ubuntu 22.04 + Flutter 3.41.9 的建置映像。
+  刻意不裝 JDK —— 相依樹裡的 `jni`（`local_auth` 帶進來的 FFI 外掛）在有 JDK 的建置機上會多編一個
+  `lib/libdartjni.so` 進 bundle（24.04 那版就有），但 Linux 上從來不會載入它，`native_assets.json` 也是空的 `{}`；
+  裝 `default-jdk` 實測也不會產出。重點是不要讓「建置機剛好有沒有 Java」決定套件內容。
+- `scripts/build_linux_container.sh`（新增）：在該映像裡跑打包，或跑任意指令（CI 用它跑 analyze／test）。
+- `scripts/package_linux.sh`：用 `objdump -T` 算出產物實際需要的 glibc 版本，寫進 `Depends: libc6 (>= X)`；
+  超過基線 2.35（Ubuntu 22.04）就直接讓打包失敗，不留下「裝得上去但開不起來」的套件。
+  `NOOK_GLIBC_BASELINE` 可覆寫。建置依賴註解的 `llvm-18` 改成「版本跟 clang 對齊」（22.04 是 `llvm`）。
+- `.github/workflows/linux-deb.yml`：analyze／test／建置全部改在 22.04 容器裡跑（不再用
+  `subosito/flutter-action` 與 host 上的 apt 依賴）；封裝後檢查 `Depends` 的 `libc6` 下限不超過 2.35；
+  乾淨安裝測試從只測 ubuntu:24.04 擴成 ubuntu:22.04 與 ubuntu:24.04 各一輪 ——
+  glibc 符號版本不合時 `ldd` 也會印「not found」，所以 22.04 那輪正是這次問題的回歸測試。
+- README：平台表、下載表、Linux 驗收狀態與建置章節同步。
+
+本次實測（在 jetubuntu 上，原生 x86_64 的 Ubuntu 22.04.5 主機）：
+
+- 22.04 容器裡 `flutter analyze` 無問題、`flutter test` 64 項全過。
+- `scripts/build_linux_container.sh` 產出 `dist/nook_1.0.0+1_amd64.deb`
+  （sha256 `f18fc98dec4da36b74c8760b566d4870a494c9a5aa4647173463357358429674`），
+  打包時印出「glibc 需求 2.34（基線 2.35）」，`Depends` 為 `libc6 (>= 2.34)`。
+- 乾淨的 ubuntu:22.04 與 ubuntu:24.04 容器各 `apt install --no-install-recommends` 成功、`ldd` 無缺。
+- 同一份 bundle 在 22.04 **實體桌面**（X11，`DISPLAY=:0`）啟動：視窗出現（WM class `tw.com.jetopto.nook`）、
+  程序存活、無錯誤輸出。只驗到「開得起來」，互動流程未做。
+- 建置途中踩到的坑：`build/native_assets/` 被手動刪掉、或 `.dart_tool/` 與 `build/` 狀態不一致時，
+  `flutter build linux` 會以 `cmake_install.cmake: file INSTALL cannot find .../build/native_assets/linux` 中斷。
+  乾淨的 checkout 不會遇到（CI 每次都是乾淨的）；本機重建前先 `flutter clean`。
+
+還沒做：
+
+- 新的 22.04 容器建置還沒在 GitHub Actions 上跑過（依指示未 commit／push）。
+- 新套件還沒在 jetubuntu 上用 `apt install` 真的裝過（需要 sudo 密碼，本 session 沒有）；
+  實機驗證是直接執行 bundle 完成的。
+- 實體桌面的互動驗收（建立／解鎖／編輯／剪貼簿清除／自動上鎖／睡眠喚醒／輸入法／HiDPI／升級）仍待做。
+- arm64 沒有在 22.04 上重新驗過。

@@ -4,11 +4,16 @@
 #   ./scripts/package_linux.sh            # 編譯並打包
 #   ./scripts/package_linux.sh --no-build # 沿用現有的 build/linux/*/release/bundle
 #
+# 要發佈的套件請走 ./scripts/build_linux_container.sh（Ubuntu 22.04 容器）而不是直接跑這支：
+#   產出的 ELF 會帶建置機 glibc 的符號版本需求，在新版 Ubuntu 上編就裝不回舊版。
+#   直接跑這支只適合「編給自己這台用」。下面的基線檢查會擋住不該外流的產物。
+#
 # 需要（建置機）：Flutter、clang、cmake、ninja-build、pkg-config、libgtk-3-dev、
 #   libsecret-1-dev（flutter_secure_storage_linux 編譯時要；快速解鎖在 Linux 停用，
 #   但外掛仍會連結 libsecret）、lld（Dart native assets 的連結器）、
-#   llvm-18（Dart native assets 要在 clang 所在的 /usr/lib/llvm-18/bin 找 llvm-ar；只裝 clang 時 release 建置會失敗，
-#   2026-11-11 在原生 x86_64 的 Ubuntu 24.04 容器實測）、dpkg-dev。
+#   llvm（Dart native assets 要在 clang 所在的 /usr/lib/llvm-<N>/bin 找 llvm-ar，版本要跟 clang 對齊：
+#   22.04 是 llvm、24.04 是 llvm-18；只裝 clang 時 release 建置會失敗，2026-11-11 兩版都實測過）、
+#   dpkg-dev（連帶 binutils，基線檢查要 objdump）。
 # 產出：dist/nook_<版本>_<架構>.deb
 #
 # 安裝後的配置：
@@ -81,6 +86,28 @@ find "$ROOT/opt/nook/lib" -name '*.so' -exec chmod 755 {} +
 
 INSTALLED_KB="$(du -sk "$ROOT" --exclude=DEBIAN | cut -f1)"
 
+# glibc 基線。在哪個發行版上編，產出的 ELF 就帶那個 glibc 的符號版本需求：Ubuntu 24.04
+# 編出來的 libflutter_secure_storage_linux_plugin.so 會引用 GLIBC_2.38 的 __isoc23_strtoll
+# （不是真的用到新功能，是新版 header 把 strtoll 重導過去），裝到 Ubuntu 22.04（glibc 2.35）
+# apt 不會擋，但一啟動就被動態連結器以「version `GLIBC_2.38' not found」打回 ——
+# 2026-11-11 在 22.04 實機上實際踩到。所以：
+#   1. .deb 一律在最舊的支援目標上編（scripts/build_linux_container.sh 用 22.04 容器）；
+#   2. 這裡把實際需求算出來寫進 Depends，萬一有人繞過第 1 點，至少 apt 會在安裝時就擋下來；
+#   3. 超過基線就直接讓打包失敗，不要留下一個「裝得上去但開不起來」的套件。
+# libstdc++ 的 GLIBCXX_ 版本同理，由「在基線發行版上編」一併涵蓋，不另外算。
+BASELINE="${NOOK_GLIBC_BASELINE:-2.35}"   # Ubuntu 22.04 LTS
+GLIBC_REQ="$(objdump -T "$ROOT/opt/nook/nook" "$ROOT/opt/nook/lib/"*.so 2>/dev/null \
+  | grep -o 'GLIBC_2\.[0-9]\{1,\}' | sed 's/^GLIBC_//' | sort -V | tail -1)"
+[[ -n "$GLIBC_REQ" ]] || { echo "讀不到 glibc 符號版本需求（objdump 在嗎？binutils）" >&2; exit 1; }
+if [[ "$(printf '%s\n%s\n' "$BASELINE" "$GLIBC_REQ" | sort -V | tail -1)" != "$BASELINE" ]]; then
+  echo "錯誤：產出需要 glibc $GLIBC_REQ，超過支援基線 $BASELINE（Ubuntu 22.04）。" >&2
+  echo "      照這樣打包出來的 .deb，裝到 22.04 會裝得上去但一開就死。" >&2
+  echo "      改在基線發行版上編：./scripts/build_linux_container.sh" >&2
+  echo "      （確定要放棄舊版支援才設 NOOK_GLIBC_BASELINE=$GLIBC_REQ）" >&2
+  exit 1
+fi
+echo "==> glibc 需求 $GLIBC_REQ（基線 $BASELINE）"
+
 # 執行期依賴：GTK 3（Flutter 的 Linux 嵌入層）、libsecret（flutter_secure_storage_linux
 # 連結它，雖然快速解鎖停用）、libegl1／libgles2（Flutter 引擎執行時 dlopen libEGL.so.1 與 libGLESv2.so.2，ldd 看不到；
 # 乾淨的 Ubuntu 沒裝它就會開不起來，實測過）。Ubuntu 24.04 起部分套件因 64 位元 time_t 改名加 t64，
@@ -95,7 +122,7 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: $MAINTAINER
 Installed-Size: $INSTALLED_KB
-Depends: libgtk-3-0t64 | libgtk-3-0, libglib2.0-0t64 | libglib2.0-0, libsecret-1-0, libegl1, libgles2, libstdc++6, libc6, fonts-noto-cjk
+Depends: libgtk-3-0t64 | libgtk-3-0, libglib2.0-0t64 | libglib2.0-0, libsecret-1-0, libegl1, libgles2, libstdc++6, libc6 (>= $GLIBC_REQ), fonts-noto-cjk
 Homepage: https://github.com/SheldonChangL/nook
 Description: Local-only secret manager for keys, accounts and hosts
  Nook keeps SSH keys, API tokens, account passwords and host credentials in an

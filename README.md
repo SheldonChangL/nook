@@ -43,26 +43,32 @@ Release 版的 entitlements 裡沒有任何網路權限。Windows 與 Linux 沒�
 | 快捷鍵修飾鍵 | `⌘` | `Ctrl` | `Ctrl` |
 | 安裝方式 | `scripts/install.sh` | 安裝器 `Nook-<版本>-windows-x64-setup.exe`（另有內測 ZIP） | `.deb` |
 | 下載 | 無（自己在 Mac 上建置） | [Releases](https://github.com/SheldonChangL/nook/releases)（**尚未發佈**，見下方） | [Releases](https://github.com/SheldonChangL/nook/releases)（**尚未發佈**） |
-| 安裝包怎麼建 | `scripts/install.sh` | [`Windows installer` workflow](.github/workflows/windows-installer.yml) 或 `scripts/package_windows.ps1` | [`Linux deb` workflow](.github/workflows/linux-deb.yml) 或 `scripts/package_linux.sh` |
+| 安裝包怎麼建 | `scripts/install.sh` | [`Windows installer` workflow](.github/workflows/windows-installer.yml) 或 `scripts/package_windows.ps1` | [`Linux deb` workflow](.github/workflows/linux-deb.yml) 或 `scripts/build_linux_container.sh` |
 | 程式碼簽章 | 本機 ad-hoc | **無**（SmartScreen 會警告） | 無（`.deb` 未簽） |
 | 作業系統層級的網路隔離 | App Sandbox | 無 | 無 |
 | 同時開多個執行個體 | 擋下（見下） | 擋下（見下） | 擋下（見下） |
-| 驗收狀態 | 實機使用中 | Windows Server 2022 CI 已建置、安裝、啟動、重裝、解除安裝；**沒有** Windows 11 實體桌面驗收 | amd64／arm64 都只在容器內驗過，**沒有**實體桌面驗收，見下方 |
+| 驗收狀態 | 實機使用中 | Windows Server 2022 CI 已建置、安裝、啟動、重裝、解除安裝；**沒有** Windows 11 實體桌面驗收 | amd64 已在 Ubuntu 22.04 實體桌面啟動驗證；完整互動驗收仍未做，見下方 |
 
 Windows 版的驗收狀態：2026-11-11 的 [PR #1](https://github.com/SheldonChangL/nook/pull/1) 在 Windows Server 2022 runner 通過 `flutter analyze`、58 項測試（另 6 項略過）、Release 建置及 Inno Setup 封裝；自動測試完成安裝、啟動、覆蓋安裝、解除安裝，並確認資料目錄保留。CI 產物的 SHA256 已在本機核對。Windows 11 實體桌面的中文顯示、主密碼操作、SmartScreen、睡眠喚醒與升級舊版本仍待驗收；目前尚未公開發佈。
 
-Linux 版的驗收狀態（都是 Docker 容器，不是實體桌面）：
+Linux 版的驗收狀態：
 
-- **amd64（首批目標）**：2026-11-11 在原生 x86_64 主機上的 Ubuntu 24.04 容器裡，`flutter analyze` 無問題、
-  `flutter test` 64 項全過、`flutter build linux --release` 與 `scripts/package_linux.sh` 產出
-  `nook_1.0.0+1_amd64.deb`（建置機要另裝 `llvm-18`，否則 release 建置找不到 `llvm-ar` 而失敗）。
-  另一個乾淨的 Ubuntu 24.04 容器用 `apt install --no-install-recommends` 安裝成功、啟動、用假密碼建立保險庫、
-  第二個執行個體被擋下、第一個被 SIGKILL 後能重新取得鎖、`apt remove` 後保險庫保留。
-- **arm64**：同樣在容器內跑過 analyze、test、release 建置、`.deb` 安裝與虛擬顯示器下的啟動與截圖。
-- **還沒做**：實體 Ubuntu 桌面（真的 X11／Wayland、輸入法、HiDPI、睡眠喚醒、從上一版升級）的互動驗收；
-  GitHub Actions 上的 `Linux deb` workflow 也還沒跑過。其他發行版都未驗證。
-2026-11-11 重新產出的 `.deb` 在乾淨容器裡只靠套件依賴就能安裝啟動（`libegl1`／`libgles2` 不必再手動補），
-也驗過從兩個安裝位置啟動時第二個會被擋下。
+- **支援範圍是 Ubuntu 22.04 以上**。2026-11-11 先踩到一次：在 Ubuntu 24.04 上編的 `.deb` 裝到
+  Ubuntu 22.04 實機，`apt` 裝得上去，一開卻是 ``version `GLIBC_2.38' not found``。
+  原因是 `flutter_secure_storage` 的外掛在 24.04 的 header 下被重導到 GLIBC_2.38 的 `__isoc23_strtoll`，
+  而當時 `.deb` 的 `Depends` 只寫 `libc6` 沒有版本下限，apt 無從擋起。現在建置一律在 22.04 容器裡做，
+  版本下限也會自動算出來寫進套件（見「[建置與安裝](#linuxubuntu-2204-以上-x64)」）。
+- **amd64（首批目標）**：2026-11-11 在 Ubuntu 22.04 容器（`linux/packaging/build.Dockerfile`）裡
+  `flutter analyze` 無問題、`flutter test` 64 項全過、`scripts/build_linux_container.sh` 產出
+  `nook_1.0.0+1_amd64.deb`，`Depends` 為 `libc6 (>= 2.34)`。乾淨的 ubuntu:22.04 與 ubuntu:24.04 容器
+  各用 `apt install --no-install-recommends` 安裝成功、`ldd` 無缺。
+- **實體桌面**：同一份 bundle 在 Ubuntu 22.04 實機（X11）上啟動，視窗正常出現、無錯誤輸出。
+  這只驗到「開得起來」。
+- **較早的容器驗收（在 Ubuntu 24.04 上編的版本）**：乾淨容器裡啟動、用假密碼建立保險庫、第二個執行個體被擋下、
+  第一個被 SIGKILL 後能重新取得鎖、`apt remove` 後保險庫保留；arm64 也跑過 analyze、test、release 建置、
+  `.deb` 安裝與虛擬顯示器下的啟動與截圖。這些流程還沒有在 22.04 的新版套件上重跑。
+- **還沒做**：實體 Ubuntu 桌面的互動驗收（建立／解鎖／編輯／剪貼簿清除／自動上鎖／睡眠喚醒／輸入法／HiDPI／
+  從上一版升級）；22.04 容器建置也還沒在 GitHub Actions 上跑過。其他發行版都未驗證。
 
 **Linux 的中文字型**：Flutter 在 Linux 上不會自己找到 CJK 字型（裝了 `fonts-noto-cjk`、fontconfig 也解析得到，
 介面中文仍是方塊，實測）。所以 Linux 版主題明確把 Noto Sans CJK TC／SC／JP 列為字型備援
@@ -134,7 +140,7 @@ flutter run -d macos
 |---|---|
 | `Nook-<版本>-windows-x64-setup.exe` | Windows 10／11 x64 安裝器（建議） |
 | `Nook-<版本>-windows-x64.zip` | Windows x64 免安裝版（內測用） |
-| `nook_<版本>_amd64.deb` | Ubuntu 24.04 x64 |
+| `nook_<版本>_amd64.deb` | Ubuntu 22.04 以上 x64 |
 | `SHA256SUMS.txt` | 以上檔案的 SHA256 |
 
 `<版本>` 是 pubspec 的 version 把 `+` 換成 `-`（`1.0.0+1` → `1.0.0-1`）：GitHub 會改寫資產檔名裡的特殊字元，
@@ -164,7 +170,7 @@ workflow 的 Artifacts 要登入 GitHub 才能下載，只給開發與驗收用�
    確認 tag 與 release 都還不存在，然後建立**草稿** release 並上傳安裝檔與 `SHA256SUMS.txt`。
    草稿只有對 repo 有寫入權限的人看得到，tag 要到發佈時才建立。（`workflow_dispatch` 只認預設分支上的
    workflow 檔，所以這步一定在合併之後。）
-3. **驗收後發佈**：從草稿頁下載資產，在乾淨的 Windows 11 x64 與 Ubuntu 24.04 x64 測試機完成下面的驗收關卡，
+3. **驗收後發佈**：從草稿頁下載資產，在乾淨的 Windows 11 x64 與 Ubuntu 22.04／24.04 x64 測試機完成下面的驗收關卡，
    把結果寫進 release 說明，再在網頁上按 **Publish release**，或：
 
    ```bash
@@ -218,17 +224,33 @@ powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1
 5. 人工：用測試用的假密碼建立保險庫、重開、解鎖、編輯、剪貼簿清除、最小化上鎖；升級到新版後用同一主密碼解鎖；
    第二個執行個體停在「已經在執行」畫面；中文顯示正常；SmartScreen 警告與「仍要執行」流程如上。
 
-### Linux（Ubuntu 24.04 x64）
+### Linux（Ubuntu 22.04 以上 x64）
 
-建置機需要 Flutter 3.41.9 與：
-
-```bash
-sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev lld llvm-18 dpkg-dev
-```
+要發佈的 `.deb` 一律在 Ubuntu 22.04 容器裡建，建置機只要有 Docker：
 
 ```bash
-flutter pub get && ./scripts/package_linux.sh
+./scripts/build_linux_container.sh
 ```
+
+容器的定義在 [`linux/packaging/build.Dockerfile`](linux/packaging/build.Dockerfile)（Ubuntu 22.04 + Flutter 3.41.9），
+CI 的 [`Linux deb` workflow](.github/workflows/linux-deb.yml) 跑的是同一支腳本、同一個映像。
+
+**為什麼不直接在自己的機器上編**：產出的 ELF 會帶著建置機 glibc 的符號版本需求。
+在 Ubuntu 24.04 上編，`flutter_secure_storage` 的外掛會引用 GLIBC_2.38 的 `__isoc23_strtoll`
+（不是真的用到新功能，是新版 header 把 `strtoll` 重導過去），那包 `.deb` 裝到 Ubuntu 22.04
+上 apt 不會擋，但一啟動就被動態連結器以 ``version `GLIBC_2.38' not found`` 打回。
+`scripts/package_linux.sh` 現在會把實際的 glibc 需求算出來寫進 `Depends: libc6 (>= X)`，
+超過 2.35（22.04）基線就直接讓打包失敗；真的要放棄舊版支援才設 `NOOK_GLIBC_BASELINE`。
+
+只想編給自己這台用，可以直接跑 `flutter pub get && ./scripts/package_linux.sh`，
+建置機要有 Flutter 3.41.9 與：
+
+```bash
+sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev lld llvm dpkg-dev
+```
+
+（`llvm` 的版本要跟 `clang` 對齊 —— Dart native assets 會去 clang 所在的 `/usr/lib/llvm-<N>/bin`
+找 `llvm-ar`：22.04 裝 `llvm`、24.04 裝 `llvm-18`。）
 
 ```bash
 sudo apt install ./dist/nook_1.0.0+1_amd64.deb   # arm64 機器上檔名是 _arm64

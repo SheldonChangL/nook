@@ -432,6 +432,9 @@ class _EnvExportRow extends StatelessWidget {
   }
 }
 
-String _stamp(DateTime t) =>
+// 存檔時是 UTC（跨機同步要比先後），顯示時換回這台的時區。
+String _stamp(DateTime utcOrLocal) => _stampLocal(utcOrLocal.toLocal());
+
+String _stampLocal(DateTime t) =>
     '${t.year}/${t.month.toString().padLeft(2, '0')}/${t.day.toString().padLeft(2, '0')} '
     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';

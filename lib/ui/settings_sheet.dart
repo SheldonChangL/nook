@@ -210,6 +210,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                           height: 1.6,
                           color: scheme.onSurfaceVariant),
                     ),
+
+                    const SizedBox(height: 20),
+                    _group('跨機同步'),
+                    // 同步在背景跑，狀態會自己變；這一段要跟著 AppState 重畫。
+                    ListenableBuilder(
+                      listenable: state,
+                      builder: (context, _) => _syncSection(scheme),
+                    ),
                   ],
                 ),
               ),
@@ -218,6 +226,121 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         ),
       ),
     );
+  }
+
+  String? _syncMessage;
+
+  Widget _syncSection(ColorScheme scheme) {
+    final hint = TextStyle(
+        fontSize: 11, height: 1.6, color: scheme.onSurfaceVariant);
+    final warn = TextStyle(fontSize: 12, height: 1.5, color: scheme.error);
+    final report = state.lastSync;
+    final children = <Widget>[];
+
+    if (!state.syncEnabled) {
+      children.addAll([
+        Text(
+          '選一個雲端硬碟（Dropbox、Google Drive、iCloud Drive⋯）裡的資料夾，'
+          '其他電腦上的 Nook 接上同一個資料夾，就會自動合併。'
+          '上傳下載由雲端硬碟的程式負責，Nook 本身不連網；放進去的全是密文，'
+          // Touch ID 只有 macOS 有；其他平台的設定頁不提它，免得讓人以為那裡也有。
+          '${PlatformProfile.current.supportsQuickUnlock ? '主密碼與 Touch ID 的金鑰' : '主密碼'}'
+          '不會進同步資料夾。設定不同步，各台各自保管。',
+          style: hint,
+        ),
+        if (state.syncSetupProblem != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(state.syncSetupProblem!, style: warn),
+          ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const ValueKey('sync-choose'),
+            onPressed: () async {
+              final error = await state.chooseSyncFolder();
+              if (mounted) setState(() => _syncMessage = error);
+            },
+            icon: const Icon(Icons.folder_open_outlined, size: 15),
+            label: const Text('選擇同步資料夾⋯', style: TextStyle(fontSize: 13)),
+          ),
+        ),
+      ]);
+    } else {
+      final status = state.syncing
+          ? '同步中⋯'
+          : report?.finishedAt != null
+              ? '上次同步 ${_clock(report!.finishedAt!)}'
+              : '尚未同步';
+      children.addAll([
+        Text(state.syncFolderPath ?? '',
+            key: const ValueKey('sync-folder'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12.5)),
+        const SizedBox(height: 4),
+        Text(status, key: const ValueKey('sync-status'), style: hint),
+        if (state.syncError != null)
+          Text(state.syncError!, key: const ValueKey('sync-error'), style: warn),
+        if (report != null && report.unreadable.isNotEmpty)
+          Text(
+            '有 ${report.unreadable.length} 個檔案讀不到，多半是雲端硬碟還沒下載完；'
+            '不會被當成刪除，之後會再試。',
+            style: hint,
+          ),
+        if (report != null && report.pendingDownload > 0)
+          Text(
+            'iCloud 還有 ${report.pendingDownload} 個檔案沒下載到這台。'
+            '建議在 Finder 對同步資料夾選「保留下載項目」。',
+            style: hint,
+          ),
+        if (state.syncNotice != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(state.syncNotice!,
+                key: const ValueKey('sync-notice'),
+                style: TextStyle(
+                    fontSize: 12, height: 1.5, color: scheme.primary)),
+          ),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(
+            key: const ValueKey('sync-now'),
+            onPressed: state.syncing ? null : state.syncNow,
+            icon: const Icon(Icons.sync, size: 15),
+            label: const Text('立即同步', style: TextStyle(fontSize: 13)),
+          ),
+          OutlinedButton(
+            key: const ValueKey('sync-stop'),
+            onPressed: () async {
+              await state.stopSync();
+              if (mounted) setState(() => _syncMessage = null);
+            },
+            child: const Text('停止同步', style: TextStyle(fontSize: 13)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text('停止同步不會刪任何東西：這台的資料和同步資料夾都原封不動。', style: hint),
+      ]);
+    }
+    if (_syncMessage != null) {
+      children.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(_syncMessage!,
+            key: const ValueKey('sync-message'), style: warn),
+      ));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  static String _clock(DateTime t) {
+    final l = t.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
   }
 
   Widget _group(String title) => Padding(

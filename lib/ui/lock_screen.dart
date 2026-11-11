@@ -36,6 +36,17 @@ class _LockScreenState extends State<LockScreen> {
 
   bool get _isSetup => widget.state.phase == VaultPhase.needsSetup;
 
+  /// 建立畫面的另一條路：這台還沒有保險庫，但別台已經在用、也設好了同步資料夾。
+  bool get _joining => _isSetup && widget.state.pendingJoinFolder != null;
+
+  /// 選同步資料夾時的錯誤（訊息比較長，不塞進按鈕上方那一行）。
+  String? _joinPickError;
+
+  Future<void> _pickJoinFolder() async {
+    final error = await widget.state.pickJoinFolder();
+    if (mounted) setState(() => _joinPickError = error);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +66,18 @@ class _LockScreenState extends State<LockScreen> {
 
   Future<void> _submit() async {
     final state = widget.state;
+    if (_joining) {
+      if (_password.text.isEmpty) {
+        setState(() => _shake++);
+        return;
+      }
+      final ok = await state.joinVault(_password.text);
+      if (!ok) {
+        setState(() => _shake++);
+        _password.clear();
+      }
+      return;
+    }
     if (_isSetup) {
       if (StrengthMeter.score(_password.text) < 2) {
         setState(() => _shake++);
@@ -152,7 +175,11 @@ class _LockScreenState extends State<LockScreen> {
         children: [
           // 文案沿用原本的版本，只有版面照新 mockup。
           Text(
-            _isSetup ? '建立你的 Nook' : '解除鎖定並進入 Nook',
+            _joining
+                ? '加入既有的保險庫'
+                : _isSetup
+                    ? '建立你的 Nook'
+                    : '解除鎖定並進入 Nook',
             style: TextStyle(
               fontSize: 30,
               height: 1.2,
@@ -163,14 +190,28 @@ class _LockScreenState extends State<LockScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _isSetup ? '設定一組主密碼來保護你的資料' : '請輸入主密碼以存取你的資料',
+            _joining
+                ? '輸入你在另一台機器設定的主密碼'
+                : _isSetup
+                    ? '設定一組主密碼來保護你的資料'
+                    : '請輸入主密碼以存取你的資料',
             style: TextStyle(fontSize: 13.5, height: 1.5, color: palette.muted),
           ),
+          if (_joining) ...[
+            const SizedBox(height: 6),
+            Text(
+              '同步資料夾：${state.pendingJoinFolder!.path}',
+              key: const ValueKey('join-folder'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11.5, height: 1.4, color: palette.muted),
+            ),
+          ],
           SizedBox(height: _isSetup ? 18 : 24),
           _label('主密碼', palette),
           const SizedBox(height: 10),
           _passwordField(controller: _password, hint: '主密碼', autofocus: true),
-          if (_isSetup) ...[
+          if (_isSetup && !_joining) ...[
             const SizedBox(height: 10),
             AnimatedBuilder(
               animation: _password,
@@ -222,8 +263,40 @@ class _LockScreenState extends State<LockScreen> {
                     height: 17,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(_isSetup ? '建立保險庫' : '解除鎖定'),
+                : Text(_joining
+                    ? '加入'
+                    : _isSetup
+                        ? '建立保險庫'
+                        : '解除鎖定'),
           ),
+          if (_isSetup) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              key: const ValueKey('join-toggle'),
+              onPressed: state.busy
+                  ? null
+                  : _joining
+                      ? () {
+                          setState(() => _joinPickError = null);
+                          state.cancelJoin();
+                        }
+                      : _pickJoinFolder,
+              child: Text(
+                _joining ? '改成建立新的保險庫' : '已經在別台電腦用 Nook？從同步資料夾加入',
+                style: const TextStyle(fontSize: 12.5),
+              ),
+            ),
+            if (_joinPickError != null)
+              Text(
+                _joinPickError!,
+                key: const ValueKey('join-error'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: Color(0xFFFF6B6B),
+                ),
+              ),
+          ],
           if (!_isSetup && state.biometricArmed) ...[
             const SizedBox(height: 10),
             OutlinedButton.icon(

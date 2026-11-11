@@ -56,7 +56,7 @@ class VaultSettings {
 ///   root 底下的 vault.json 是明文，只有版本、KDF 參數、被包住的 DEK、設定
 ///   root/items/「id」.item 每筆項目一個檔，整包密文，連名稱都在裡面
 ///
-/// 每筆一個檔是為了之後要做跨機同步時好合併，現在不實作同步，但格式先留著。
+/// 每筆一個檔是為了跨機同步時能逐筆合併（lib/sync/sync_engine.dart）。
 class VaultStore {
   VaultStore(
     this.root, {
@@ -98,6 +98,17 @@ class VaultStore {
 
   KdfParams? _kdfParams;
   SecretKey? _dek;
+
+  /// 最後一次換主密碼（重新包 DEK）的時間。同步時用來決定哪一份金鑰包裝比較新：
+  /// 一台換了主密碼，另一台要跟著換，而不是被舊的蓋回去。舊版保險庫沒有這個欄位，
+  /// 當成 epoch。
+  DateTime _keyChangedAt = _epoch;
+  static final _epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+  /// 項目檔的寫入要排隊：同步會在背景套用別台的版本，跟使用者存檔同時發生時，
+  /// 兩邊的暫存檔 rename 到同一個目標，誰後完成不一定 —— 磁碟上留的可能跟
+  /// 記憶體裡的不是同一份。排成一列就不會。
+  Future<void>? _itemsBusy;
   VaultSettings _settings = VaultSettings();
   final Map<String, VaultItem> _items = {};
 
@@ -139,10 +150,34 @@ class VaultStore {
     _kdfParams = params;
     _dek = SecretKey(dek);
     _settings = VaultSettings();
+    _keyChangedAt = DateTime.now().toUtc();
     _items.clear();
 
     await _writeManifest(wrapped);
   }
+
+  /// 在新機器上加入既有的保險庫：金鑰包裝取自同步資料夾，DEK 由呼叫端用主密碼
+  /// 解開並驗證過。設定用這台的預設值（設定不同步，各台各自保管）。
+  /// 目錄已經有保險庫就拒絕 —— 兩個 DEK 不同的保險庫沒辦法合併。
+  Future<void> createFromKeyMaterial({
+    required KdfParams kdf,
+    required List<int> wrappedDek,
+    required DateTime keyChangedAt,
+    required List<int> dek,
+  }) => _serialized(() async {
+    if (exists) {
+      throw const VaultOpenException('這台機器已經有保險庫了');
+    }
+    await root.create(recursive: true);
+    await _itemsDir.create(recursive: true);
+    await restrictPermissions();
+    _kdfParams = kdf;
+    _dek = SecretKey(List<int>.of(dek));
+    _settings = VaultSettings();
+    _keyChangedAt = keyChangedAt.toUtc();
+    _items.clear();
+    await _writeManifest(wrappedDek);
+  });
 
   // ---------------------------------------------------------------- 解鎖
 
@@ -156,6 +191,7 @@ class VaultStore {
 
     _kdfParams = params;
     _dek = SecretKey(dek);
+    _keyChangedAt = _readKeyChangedAt(manifest);
     _settings = VaultSettings.fromJson(
       manifest['settings'] as Map<String, dynamic>?,
     );
@@ -166,6 +202,7 @@ class VaultStore {
   Future<void> unlockWithDek(List<int> dek) async {
     final manifest = await _readManifest();
     _kdfParams = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
+    _keyChangedAt = _readKeyChangedAt(manifest);
     _dek = SecretKey(dek);
     _settings = VaultSettings.fromJson(
       manifest['settings'] as Map<String, dynamic>?,
@@ -195,24 +232,136 @@ class VaultStore {
 
   /// [bumpUpdated] 為 false 時不動 updatedAt —— 記錄「被存取過」用的，
   /// 看一眼不該讓它在清單裡跳到最前面。
-  Future<void> put(VaultItem item, {bool bumpUpdated = true}) async {
+  ///
+  /// updatedAt 一律存 UTC，而且每次修改都比上一版大（至少 +1 ms）：同步靠它判斷
+  /// 「這是不是比上次同步過的版本還新」，兩台機器的時鐘或時區不一致時，
+  /// 用 DateTime.now() 直接蓋可能讓新版本的時間反而比舊版本早。
+  /// 時間戳在呼叫的當下就改（同步的），寫檔才排隊 —— 背景同步要能立刻看出
+  /// 「這筆剛被改過」，不能拿別台的版本蓋掉它。
+  Future<void> put(VaultItem item, {bool bumpUpdated = true}) {
     _requireUnlocked();
-    if (bumpUpdated) item.updatedAt = DateTime.now();
+    if (bumpUpdated) item.updatedAt = nextUpdatedAt(item.updatedAt);
+    return _itemsSerialized(() => _writeItem(item));
+  }
+
+  /// 比 [previous] 晚、而且不早於現在的 UTC 時間。
+  static DateTime nextUpdatedAt(DateTime previous) {
+    final now = DateTime.now().toUtc();
+    final floor = previous.toUtc().add(const Duration(milliseconds: 1));
+    return now.isAfter(floor) ? now : floor;
+  }
+
+  Future<void> delete(String id) {
+    _requireUnlocked();
+    return _itemsSerialized(() async {
+      final file = File('${_itemsDir.path}/$id.item');
+      if (file.existsSync()) await file.delete();
+      _items.remove(id);
+    });
+  }
+
+  /// 同步專用：只有在本機這筆仍是 [expected]（同一個物件、updatedAt 也沒變；
+  /// 或兩者都不存在）時，才換成 [replacement]（null 代表刪除）。回傳有沒有套用。
+  ///
+  /// 檢查放在排隊之後才做：同步決定要套用別台的版本，到真的寫進去之間，使用者
+  /// 可能剛好存了檔。那種情況放棄這次，下一輪同步會再比一次。
+  /// 換進來的版本保留本機的 lastAccessedAt —— 那是這台自己的使用紀錄，不同步。
+  Future<bool> applySynced(
+    String id, {
+    required VaultItem? expected,
+    required DateTime? expectedUpdatedAt,
+    required VaultItem? replacement,
+  }) {
+    _requireUnlocked();
+    return _itemsSerialized(() async {
+      if (_dek == null) return false; // 排隊期間被上鎖了
+      final current = _items[id];
+      if (!identical(current, expected)) return false;
+      // DateTime 的 == 連 UTC／本地旗標都比，同一刻也可能不相等；只比時刻。
+      if (current != null &&
+          (expectedUpdatedAt == null ||
+              !current.updatedAt.isAtSameMomentAs(expectedUpdatedAt))) {
+        return false;
+      }
+      if (replacement == null) {
+        final file = File('${_itemsDir.path}/$id.item');
+        if (file.existsSync()) await file.delete();
+        _items.remove(id);
+        return true;
+      }
+      replacement.lastAccessedAt = current?.lastAccessedAt;
+      await _writeItem(replacement);
+      return true;
+    });
+  }
+
+  Future<void> _writeItem(VaultItem item) async {
+    final dek = _dek;
+    if (dek == null) throw const VaultOpenException('保險庫是鎖著的');
     await _itemsDir.create(recursive: true);
     final sealed = await VaultCrypto.seal(
-      _dek!,
+      dek,
       utf8.encode(jsonEncode(item.toJson())),
     );
     await _writeAtomic(File('${_itemsDir.path}/${item.id}.item'), sealed);
     _items[item.id] = item;
   }
 
-  Future<void> delete(String id) async {
+  // ---------------------------------------------------------------- 同步用
+
+  /// 用 DEK 加密任意資料。同步資料夾裡的項目、刪除標記與金鑰包裝的認證都用它。
+  Future<Uint8List> sealWithDek(List<int> plaintext) {
     _requireUnlocked();
-    final file = File('${_itemsDir.path}/$id.item');
-    if (file.existsSync()) await file.delete();
-    _items.remove(id);
+    return VaultCrypto.seal(_dek!, plaintext);
   }
+
+  /// [sealWithDek] 的反向。不是這把 DEK 封的、或被改過，丟 [VaultOpenException]。
+  Future<Uint8List> openWithDek(Uint8List sealed) {
+    _requireUnlocked();
+    return VaultCrypto.open(_dek!, sealed);
+  }
+
+  /// [dek] 是不是這個保險庫的 DEK：拿它試解本機的一個項目檔。
+  /// 沒有任何項目時無從比對，回 true（空保險庫換哪把都不會壞掉資料）。
+  /// 不需要解鎖 —— 給「主密碼在別台換過」的解鎖備案用。
+  Future<bool> dekMatchesLocalItems(List<int> dek) async {
+    if (!_itemsDir.existsSync()) return true;
+    final files = _itemsDir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.item'));
+    for (final file in files) {
+      try {
+        await VaultCrypto.open(SecretKey(dek), await file.readAsBytes());
+        return true;
+      } on VaultOpenException {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// 目前磁碟上的金鑰包裝（KDF 參數、被包住的 DEK、換密碼時間）。
+  /// 一律從磁碟讀：另一個流程（例如剛套用了別台換過的主密碼）可能改過它。
+  Future<KeyMaterial> readKeyMaterial() async {
+    final manifest = await _readManifest();
+    return KeyMaterial(
+      kdf: KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>),
+      wrappedDek: base64Decode(manifest['wrappedDek'] as String),
+      keyChangedAt: _readKeyChangedAt(manifest),
+    );
+  }
+
+  /// 換成別台機器換過主密碼後的金鑰包裝。DEK 不變，所以項目檔一個都不用動，
+  /// Touch ID 存的那份也照樣能用；之後解鎖要用新的主密碼。
+  /// 呼叫端必須先驗證過這份包裝出自持有同一把 DEK 的 Nook（見 SyncEngine）。
+  Future<void> adoptKeyMaterial(KeyMaterial material) => _serialized(() async {
+    final current = await _readManifest();
+    if (!material.keyChangedAt.isAfter(_readKeyChangedAt(current))) return;
+    _kdfParams = material.kdf;
+    _keyChangedAt = material.keyChangedAt.toUtc();
+    await _writeManifest(material.wrappedDek);
+  });
 
   // ---------------------------------------------------------------- 維護
 
@@ -232,6 +381,7 @@ class VaultStore {
     final rewrapped = await VaultCrypto.seal(newKek, dek);
 
     _kdfParams = freshParams;
+    _keyChangedAt = nextUpdatedAt(_readKeyChangedAt(manifest));
     await _writeManifest(rewrapped);
   }
 
@@ -243,6 +393,7 @@ class VaultStore {
     // 磁碟上的 manifest 被換過主密碼之後（例如從備份還原、或單一執行個體保護失效），
     // 這裡會把舊 salt 配上新 wrappedDek 寫回去，新舊密碼就都打不開了。
     _kdfParams = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
+    _keyChangedAt = _readKeyChangedAt(manifest);
     await _writeManifest(base64Decode(manifest['wrappedDek'] as String));
   }
 
@@ -263,6 +414,7 @@ class VaultStore {
       throw VaultOpenException('不認得的保險庫格式版本：$version');
     }
     _kdfParams = KdfParams.fromJson(manifest['kdf'] as Map<String, dynamic>);
+    _keyChangedAt = _readKeyChangedAt(manifest);
     _settings = VaultSettings.fromJson(
       manifest['settings'] as Map<String, dynamic>?,
     );
@@ -329,6 +481,7 @@ class VaultStore {
       'version': 1,
       'kdf': _kdfParams!.toJson(),
       'wrappedDek': base64Encode(wrappedDek),
+      'keyChangedAt': _keyChangedAt.toUtc().toIso8601String(),
       'settings': _settings.toJson(),
     };
     await _writeAtomic(
@@ -350,6 +503,26 @@ class VaultStore {
         jsonDecode(utf8.decode(clear)) as Map<String, dynamic>,
       );
       _items[item.id] = item;
+    }
+  }
+
+  static DateTime _readKeyChangedAt(Map<String, dynamic> manifest) {
+    final raw = manifest['keyChangedAt'] as String?;
+    return raw == null ? _epoch : DateTime.parse(raw).toUtc();
+  }
+
+  /// 跟 [_serialized] 同一個寫法，排的是項目檔。
+  Future<T> _itemsSerialized<T>(Future<T> Function() action) async {
+    while (_itemsBusy != null) {
+      await _itemsBusy;
+    }
+    final done = Completer<void>();
+    _itemsBusy = done.future;
+    try {
+      return await action();
+    } finally {
+      _itemsBusy = null;
+      done.complete();
     }
   }
 
@@ -394,3 +567,17 @@ class VaultStore {
 
 /// 讓外部不必知道 Uint8List 細節。
 typedef SealedBytes = Uint8List;
+
+/// 保險庫的金鑰包裝：從主密碼推出 KEK 的參數、被 KEK 包住的 DEK，以及最後一次
+/// 換主密碼的時間。不含任何能直接解開資料的東西。
+class KeyMaterial {
+  const KeyMaterial({
+    required this.kdf,
+    required this.wrappedDek,
+    required this.keyChangedAt,
+  });
+
+  final KdfParams kdf;
+  final List<int> wrappedDek;
+  final DateTime keyChangedAt;
+}

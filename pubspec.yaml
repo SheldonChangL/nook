@@ -42,6 +42,7 @@ dependencies:
   flutter_svg: ^2.3.2
   # 單一執行個體鎖直接呼叫 OS API（lib/app/instance_lock.dart）；原本就是間接依賴，版本不變。
   ffi: ^2.2.0
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

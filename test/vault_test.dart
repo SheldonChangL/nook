@@ -1,3 +1,9 @@
+// 這支用正式強度的 Argon2id（128 MiB、4 線），第一次呼叫還要啟動 isolate。
+// Windows CI runner 上第一項要 20 秒以上，預設 30 秒逾時會擦邊失敗（2026-11-11 實測）。
+// 只放寬逾時，斷言不變；耗時本身由「Argon2id 解鎖耗時落在可接受範圍」那一項把關。
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'dart:io';
 import 'dart:typed_data';
 

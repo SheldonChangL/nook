@@ -74,13 +74,26 @@ void main() {
     linux = Box(tmp, 'linux');
   });
 
-  tearDown(() {
+  tearDown(() async {
     for (final s in opened) {
       s.lock();
+      // 解鎖時觸發的背景同步可能還在跑、還開著檔案。Windows 不准刪除開著的檔案，
+      // 等它收尾再拆。
+      for (var i = 0; i < 300 && s.syncing; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       s.dispose();
     }
     opened.clear();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    // Windows 上檔案剛關閉時可能還被防毒或索引程式握著一下，稍等重試。
+    for (var attempt = 0; tmp.existsSync(); attempt++) {
+      try {
+        tmp.deleteSync(recursive: true);
+      } on FileSystemException {
+        if (attempt >= 20) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
   });
 
   Future<AppState> macWithSync() async {

@@ -311,3 +311,10 @@ Linux amd64 驗證（由 Codex 在 jetubuntu 進行，原生 x86_64 主機上的
 5. 從草稿下載資產，`sha256sum -c --ignore-missing SHA256SUMS.txt`，抽驗安裝（至少 Windows 安裝器一次，有上一版就測
    `-PreviousInstaller` 升級），把驗收結果與「未簽章」說明寫進 release 說明。
 6. 由人明確發佈（Publish release／`gh release edit <tag> --draft=false`）。在這之前沒有任何公開下載。
+
+### 2026-11-11（PR 上的安裝包驗收）
+
+- [PR #1](https://github.com/SheldonChangL/nook/pull/1) 已建立，Windows 與 Linux 工作流在 commit `49aa544` 上全綠。
+- [Windows run 42965527686](https://github.com/SheldonChangL/nook/actions/runs/42965527686)：Windows Server 2022 上 `flutter analyze` 通過、58 項測試通過（6 項略過）、`flutter build windows --release` 成功；產出 `Nook-1.0.0-1-windows-x64-setup.exe` 與 ZIP。冒煙測試實際安裝、啟動、覆蓋安裝、解除安裝，確認程式和捷徑移除、資料目錄保留。下載 artifact 後在本機比對 SHA256，兩個檔案皆通過。
+- [Linux run 42965527828](https://github.com/SheldonChangL/nook/actions/runs/42965527828)：Ubuntu 24.04 x64 上分析、測試、Release 建置、`.deb` 封裝與乾淨容器安裝全綠；下載後在本機比對 SHA256 通過。
+- 工作流 artifact 供驗收使用，公開 Releases 仍未建立。Windows 11 x64 與 Ubuntu 24.04 x64 實體桌面的人機互動驗收尚未完成；依上述發行關卡，不能宣稱正式支援或公開發佈。

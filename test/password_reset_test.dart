@@ -63,8 +63,16 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('nook_reset_');
     vault = Directory('${tmp.path}/vault');
   });
-  tearDown(() {
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+  tearDown(() async {
+    // Windows 上檔案剛關閉時可能還被防毒或索引程式握著一下，稍等重試（CI 實測）。
+    for (var attempt = 0; tmp.existsSync(); attempt++) {
+      try {
+        tmp.deleteSync(recursive: true);
+      } on FileSystemException {
+        if (attempt >= 20) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
   });
 
   VaultStore newStore() => VaultStore(vault,

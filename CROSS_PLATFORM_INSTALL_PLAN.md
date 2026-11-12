@@ -372,3 +372,17 @@ Linux amd64 驗證（由 Codex 在 jetubuntu 進行，原生 x86_64 主機上的
   實機驗證是直接執行 bundle 完成的。
 - 實體桌面的互動驗收（建立／解鎖／編輯／剪貼簿清除／自動上鎖／睡眠喚醒／輸入法／HiDPI／升級）仍待做。
 - arm64 沒有在 22.04 上重新驗過。
+
+### 2026-11-12（v1.0.0 公開為測試版）
+
+- PR #1（安裝檔與 Ubuntu 22.04 建置）與 PR #2（跨機同步）合併進 `main` 之後，從 `main` 的 `548b14c` 手動執行
+  [`Release draft`](https://github.com/SheldonChangL/nook/actions/runs/43135602153)（`tag=v1.0.0`、`prerelease=true`），
+  guard／windows／linux／draft 四個 job 全綠。
+- 下載草稿的三個安裝檔，與 `SHA256SUMS.txt` 比對全部相符；`nook_1.0.0-1_amd64.deb` 在乾淨的 `ubuntu:22.04`
+  容器安裝成功（`libc6 (>= 2.34)`、`ldd` 無缺）；Windows ZIP 內含 `nook.exe` 與 `file_selector_windows_plugin.dll`。
+- 草稿說明換成完整版本（下載與雜湊比對、macOS 不提供下載的原因、同步功能、未簽章、換主密碼不換 DEK、驗收狀態），
+  經維護者同意後公開：[v1.0.0](https://github.com/SheldonChangL/nook/releases/tag/v1.0.0)，標為 pre-release，
+  `v1.0.0` tag 在 `548b14c`。未登入狀態下四個資產都能下載，雜湊相符。
+- 上一節的關卡中仍未完成、因此標為測試版而非正式版：Windows 11 x64 實體桌面驗收、Ubuntu 實體桌面的完整互動驗收、
+  實際雲端硬碟程式（Dropbox／Google Drive／iCloud Drive）的同步實測、macOS 版的選資料夾與 bookmark 實際操作。
+- `release-draft.yml` 自動產生的說明原本寫「Ubuntu 24.04」，改成「Ubuntu 22.04 以上」。

@@ -329,14 +329,6 @@ class VaultStore {
     return total == 0 || opened > 0;
   }
 
-  /// [dek] 有沒有被證明是這個保險庫的：至少打開了一個項目檔。
-  /// 空保險庫證明不了，回 false —— 重設主密碼時不能拿一把沒驗過的金鑰去換掉真的包裝。
-  /// 某幾個檔壞了（被截斷、半同步）不影響判斷：只要有一個打得開就算數。
-  Future<bool> dekProvenByItems(List<int> dek) async {
-    final (opened, _) = await _countOpenable(dek);
-    return opened > 0;
-  }
-
   Future<(int, int)> _countOpenable(List<int> dek) async {
     if (!_itemsDir.existsSync()) return (0, 0);
     final files = _itemsDir
@@ -401,15 +393,13 @@ class VaultStore {
     await _writeManifest(rewrapped);
   }
 
-  /// 忘記主密碼時換上新的：把 [dek] 用新密碼重新包一次，不需要舊密碼，上鎖狀態也能做。
+  /// 不用舊密碼換主密碼：把 [dek] 用新密碼重新包一次。
   ///
-  /// 只有已經用別的方式拿到 DEK 的時候才走得到（目前是 Touch ID 存在 Keychain 的那份），
-  /// 呼叫端要先用 [dekProvenByItems] 確認它真的是這個保險庫的。拿得到 DEK 的人本來就
-  /// 看得到全部資料，所以這不是新的後門，只是讓那條路也能換鎖。項目檔一個都不用動，
-  /// DEK 不變，Touch ID 之後照樣能用。換密碼時間往前推，用了同步的話其他機器會跟著換。
-  ///
-  /// 刻意不先解鎖：解鎖要把每個項目都解開，只要有一個檔壞了就整個失敗 —— 那會讓
-  /// 「主密碼忘了」加上「有一筆壞掉」變成連重設都做不了。
+  /// 給「忘了主密碼、用 Touch ID 進來」的情況用：呼叫端已經用 Touch ID 確認過身分，
+  /// 而且 [dek] 跟目前解鎖用的那把相同（見 AppState.changeMasterPasswordWithBiometrics）。
+  /// 拿得到 DEK 的人本來就看得到全部資料，所以這不是新的後門，只是讓那條路也能換鎖。
+  /// 項目檔一個都不用動，DEK 不變，Touch ID 之後照樣能用。換密碼時間往前推，
+  /// 用了同步的話其他機器會跟著換成新的包裝。
   Future<void> resetPassword(String newPassword, {required List<int> dek}) =>
       _serialized(() async {
     final manifest = await _readManifest();

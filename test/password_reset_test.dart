@@ -289,6 +289,18 @@ void main() {
     }
   }
 
+  /// 先把畫面卸掉再上鎖。直接上鎖的話，鎖定畫面會重新出現，而剛用過 Touch ID，
+  /// 它會自動再跳一次 Touch ID 解鎖、開始讀保險庫的檔案；測試在讀到一半時結束，
+  /// 檔案還開著，Windows 就刪不掉暫存資料夾（CI 實測）。
+  Future<void> unmountThenLock(WidgetTester tester, AppState state) async {
+    final gate = state.biometrics as FakeTouchId;
+    final readsBefore = gate.reasons.length;
+    await tester.pumpWidget(const SizedBox());
+    state.lock();
+    await grind(tester);
+    expect(gate.reasons.length, readsBefore, reason: '上鎖後不該再自動跳 Touch ID 讀保險庫');
+  }
+
   /// 讓需要真實時間的非同步工作（金鑰衍生、檔案）跑完，同時推畫面。
   Future<void> settle(WidgetTester tester, bool Function() done) async {
     for (var i = 0; i < 300 && !done(); i++) {
@@ -333,13 +345,11 @@ void main() {
     await grind(tester);
     expect(find.text('主密碼已更換'), findsOneWidget);
 
-    state.lock();
-    await grind(tester);
+    await unmountThenLock(tester, state);
     late bool ok;
     await tester.runAsync(() async => ok = await state.unlock(fresh));
     expect(ok, isTrue);
     state.lock();
-    await grind(tester);
   });
 
   testWidgets('設定頁關掉 Touch ID 前會警告；取消就什麼都不刪', (tester) async {
@@ -366,7 +376,6 @@ void main() {
     expect(gate.forgetCalls, 0);
     expect(state.settings.biometricEnabled, isTrue);
 
-    state.lock();
-    await grind(tester);
+    await unmountThenLock(tester, state);
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 }

@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app/app_state.dart';
 import '../app/platform_profile.dart';
+import 'new_password_dialog.dart';
 import 'theme.dart';
 import 'widgets/fields.dart';
 import 'widgets/motion.dart';
@@ -41,6 +42,28 @@ class _LockScreenState extends State<LockScreen> {
 
   /// 選同步資料夾時的錯誤（訊息比較長，不塞進按鈕上方那一行）。
   String? _joinPickError;
+
+  /// 忘記主密碼：先問新密碼，再走 Touch ID。順序反過來的話，Touch ID 通過之後
+  /// 使用者才發現要想新密碼，中途取消就白驗了一次。
+  Future<void> _resetWithTouchId() async {
+    final state = widget.state;
+    final newPassword = await showDialog<String>(
+      context: context,
+      builder: (context) => NewPasswordDialog(
+        title: '用 Touch ID 設定新的主密碼',
+        explanation: '舊的主密碼不需要。通過 Touch ID（或輸入這台 Mac 的登入密碼）之後，'
+            'Nook 會用存在 Keychain 裡的那份金鑰換上新的主密碼。資料一筆都不會動，'
+            'Touch ID 之後照樣能用。\n\n'
+            '新的主密碼請另外寫下來放在安全的地方。'
+            '有用跨機同步的話，其他電腦同步之後也會換成新的主密碼，'
+            '舊的主密碼在那些電腦上同樣會失效。',
+        confirmLabel: '下一步：Touch ID',
+      ),
+    );
+    if (newPassword == null || !mounted) return;
+    final ok = await state.resetPasswordWithBiometrics(newPassword);
+    if (!ok && mounted) setState(() => _shake++);
+  }
 
   Future<void> _pickJoinFolder() async {
     final error = await widget.state.pickJoinFolder();
@@ -223,15 +246,17 @@ class _LockScreenState extends State<LockScreen> {
             _passwordField(controller: _confirm, hint: '再打一次'),
           ],
           // 錯誤訊息放在按鈕上方那段固定間距裡，出現時整體不跳動。
-          SizedBox(
-            height: 26,
+          ConstrainedBox(
+            // 平常佔固定高度，錯誤出現時整體不跳動；重設主密碼的說明比較長，允許換行。
+            constraints: const BoxConstraints(minHeight: 26),
             child: error == null
                 ? null
                 : Padding(
-                    padding: const EdgeInsets.only(top: 7),
+                    padding: const EdgeInsets.only(top: 7, bottom: 6),
                     child: Text(
                       error,
-                      maxLines: 1,
+                      key: const ValueKey('unlock-error'),
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
@@ -307,6 +332,17 @@ class _LockScreenState extends State<LockScreen> {
               ),
               icon: const Icon(Icons.fingerprint, size: 18),
               label: const Text('用 Touch ID 解除鎖定'),
+            ),
+          ],
+          if (!_isSetup && state.canResetWithBiometrics) ...[
+            const SizedBox(height: 4),
+            TextButton(
+              key: const ValueKey('reset-with-touch-id'),
+              onPressed: state.busy ? null : _resetWithTouchId,
+              child: const Text(
+                '忘記主密碼？用 Touch ID 設定新的',
+                style: TextStyle(fontSize: 12.5),
+              ),
             ),
           ],
         ],

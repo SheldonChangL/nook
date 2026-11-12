@@ -39,6 +39,10 @@ class BiometricGate {
             );
 
   final bool _platformSupported;
+
+  /// 這個平台有沒有 Touch ID 這條路（只有 macOS）。不探測硬體，也不碰 Keychain。
+  bool get isPlatformSupported => _platformSupported;
+
   final LocalAuthentication _auth;
   final FlutterSecureStorage _storage;
 
@@ -99,12 +103,33 @@ class BiometricGate {
   }
 
   /// Touch ID 解鎖。沒通過或 Keychain 裡沒東西就回 null，呼叫端退回主密碼。
-  Future<List<int>?> unlock() async {
+  /// [reason] 是系統對話框上的說明。
+  ///
+  /// 讀 Keychain 這一步刻意不加逾時：換過版本的 app 第一次讀時，macOS 會先問
+  /// 登入密碼，要等使用者回應。
+  Future<List<int>?> unlock({String reason = '用 Touch ID 解鎖 Nook'}) async {
     if (!_platformSupported) return null;
     final stored = await _storage.read(key: _dekKey);
     if (stored == null) return null;
-    if (!await _authenticate('用 Touch ID 解鎖 Nook')) return null;
+    if (!await _authenticate(reason)) return null;
     return base64Decode(stored);
+  }
+
+  /// 給「忘記主密碼」用：讀出 Keychain 裡的 DEK，並把失敗原因分清楚，
+  /// 讓畫面說得出是「沒有存」「Touch ID 沒過」還是「macOS 不讓讀」。
+  Future<KeychainDek> readDek({required String reason}) async {
+    if (!_platformSupported) return const KeychainDek(KeychainDekStatus.notStored);
+    final String? stored;
+    try {
+      stored = await _storage.read(key: _dekKey);
+    } catch (e) {
+      return KeychainDek(KeychainDekStatus.keychainError, message: _describe(e));
+    }
+    if (stored == null) return const KeychainDek(KeychainDekStatus.notStored);
+    if (!await _authenticate(reason)) {
+      return const KeychainDek(KeychainDekStatus.denied);
+    }
+    return KeychainDek(KeychainDekStatus.ok, dek: base64Decode(stored));
   }
 
   Future<bool> _authenticate(String reason) async {
@@ -119,4 +144,16 @@ class BiometricGate {
       return false;
     }
   }
+}
+
+enum KeychainDekStatus { ok, notStored, denied, keychainError }
+
+/// [BiometricGate.readDek] 的結果。
+class KeychainDek {
+  const KeychainDek(this.status, {this.dek, this.message});
+  final KeychainDekStatus status;
+  final List<int>? dek;
+
+  /// [KeychainDekStatus.keychainError] 時，macOS 回報的原因。
+  final String? message;
 }

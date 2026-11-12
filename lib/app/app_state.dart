@@ -251,85 +251,50 @@ class AppState extends ChangeNotifier {
     unawaited(unlockWithBiometrics());
   }
 
-  /// 忘記主密碼時能不能用 Touch ID 設定新的：這台是 Mac，而且開過 Touch ID。
+  /// 這台有沒有 Touch ID 這條路：是 Mac，而且開過 Touch ID（vault.json 公開設定裡的開關）。
   ///
-  /// 看的是 vault.json 公開設定裡的開關，不看開機時探測 Keychain 的結果
-  /// （[biometricArmed]）：換過版本的 app 第一次讀 Keychain，macOS 會先跳出要登入密碼
-  /// 的對話框，開機探測只等 3 秒，可能判成沒有 —— 但真的按下重設時，使用者可以在
-  /// 那個對話框按允許。這是救命的路，不能因為探測逾時就藏起來。
-  bool get canResetWithBiometrics =>
-      phase == VaultPhase.locked &&
-      biometrics.isPlatformSupported &&
-      settings.biometricEnabled;
+  /// 刻意不看開機時探測 Keychain 的結果（[biometricArmed]）：換過版本的 app 第一次讀
+  /// Keychain，macOS 會先跳出要登入密碼的對話框，開機探測只等 3 秒，可能判成沒有。
+  /// 對忘了主密碼的人，Touch ID 是唯一進得去的路，不能因為探測逾時就把按鈕藏起來。
+  bool get canUnlockWithBiometrics =>
+      biometrics.isPlatformSupported && settings.biometricEnabled;
 
-  /// 忘記主密碼：通過 Touch ID 拿到 Keychain 裡的 DEK，確認它真的打得開這個保險庫，
-  /// 再用它換上 [newPassword]。成功後直接是解鎖狀態。
+  /// 設定頁的 Touch ID 開關要顯示成開或關。開機探測逾時（[biometricArmed] 是 false）
+  /// 不代表沒開 —— 顯示成關，使用者會以為要再開一次，反而去覆寫既有的金鑰。
+  bool get biometricSwitchOn => biometricArmed || canUnlockWithBiometrics;
+
+  /// Touch ID 解鎖。Touch ID 沒通過就安靜地回 false，退回主密碼；其他失敗會說明原因。
   ///
-  /// 失敗時一律不動 Keychain 那份 —— 這時它可能是唯一還能打開資料的東西。
-  Future<bool> resetPasswordWithBiometrics(String newPassword) async {
-    if (!canResetWithBiometrics) return false;
+  /// 失敗時一律不刪 Keychain 那份：解不開不一定是金鑰錯，也可能是某個項目檔壞了，
+  /// 而忘了主密碼的人，那份可能是唯一打得開資料的東西。只有使用者在設定裡親手
+  /// 關掉 Touch ID 才會刪。
+  Future<bool> unlockWithBiometrics() async {
+    if (phase != VaultPhase.locked || !canUnlockWithBiometrics) return false;
     return _guard(() async {
-      final read = await biometrics.readDek(
-        reason: '確認是本人，才能為 Nook 設定新的主密碼',
-      );
+      final read = await biometrics.readDek(reason: '用 Touch ID 解鎖 Nook');
       switch (read.status) {
-        case KeychainDekStatus.notStored:
-          throw const VaultOpenException(
-            '這台 Mac 的鑰匙圈裡沒有 Nook 的金鑰，沒辦法用 Touch ID 重設',
-          );
         case KeychainDekStatus.denied:
-          throw const VaultOpenException('Touch ID 沒有通過，主密碼沒有變更');
+          return false;
+        case KeychainDekStatus.notStored:
+          throw const VaultOpenException('這台 Mac 的鑰匙圈裡沒有 Nook 的金鑰，請用主密碼');
         case KeychainDekStatus.keychainError:
-          throw VaultOpenException(
-            'macOS 沒讓 Nook 讀鑰匙圈，主密碼沒有變更（${read.message}）',
-          );
+          throw VaultOpenException('macOS 沒讓 Nook 讀鑰匙圈，請用主密碼（${read.message}）');
         case KeychainDekStatus.ok:
           break;
       }
-      final dek = read.dek!;
-      // 先證明這把金鑰真的是這個保險庫的（至少打開一筆），才拿它換掉現在的包裝。
-      if (!await store.dekProvenByItems(dek)) {
-        throw const VaultOpenException(
-          'Touch ID 存的金鑰打不開這個保險庫的任何一筆資料，主密碼沒有變更',
-        );
-      }
-      await store.resetPassword(newPassword, dek: dek);
       try {
-        await store.unlockWithDek(dek);
+        await store.unlockWithDek(read.dek!);
       } on VaultOpenException {
-        // 主密碼已經換好了；解不開的是某個壞掉的項目檔。
-        store.lock();
-        throw const VaultOpenException(
-          '主密碼已換成新的，但有資料檔讀不出來，請用新主密碼再試一次',
-        );
+        // 這次先不再自動跳 Touch ID，按鈕還在，可以再試。
+        biometricArmed = false;
+        throw const VaultOpenException('Touch ID 沒能打開保險庫，請用主密碼');
       }
       biometricArmed = true;
-      // 解鎖後的第一輪同步會把新的金鑰包裝傳到其他機器（用了同步的話）。
       _afterUnlock();
       return true;
     });
   }
 
-  /// Touch ID 解鎖。沒開、沒通過、或 Keychain 那份跟保險庫對不上，都回 false
-  /// 讓畫面退回主密碼。
-  Future<bool> unlockWithBiometrics() async {
-    if (!biometricArmed) return false;
-    return _guard(() async {
-      final dek = await biometrics.unlock();
-      if (dek == null) return false;
-      try {
-        await store.unlockWithDek(dek);
-      } on VaultOpenException {
-        // 絕不在這裡刪掉 Keychain 那份：解不開不一定是金鑰錯，也可能是某個項目檔
-        // 壞了或格式不認得。忘了主密碼的人，那份可能是唯一打得開資料的東西。
-        // 只有使用者在設定裡親手關掉 Touch ID 才會刪。這次先不再自動跳 Touch ID。
-        biometricArmed = false;
-        throw const VaultOpenException('Touch ID 沒能打開保險庫，請用主密碼');
-      }
-      _afterUnlock();
-      return true;
-    });
-  }
 
   void _afterUnlock() {
     _autoUnlockPending = false;
@@ -488,6 +453,61 @@ class AppState extends ChangeNotifier {
     } on VaultOpenException catch (e) {
       return e.message;
     }
+  }
+
+  /// 解鎖後可以用 Touch ID 代替目前的主密碼來改密碼（忘了主密碼、用 Touch ID 進來的時候）。
+  bool get canChangePasswordWithBiometrics =>
+      phase == VaultPhase.unlocked && canUnlockWithBiometrics;
+
+  /// 不用舊密碼、改用 Touch ID 確認身分來換主密碼。回傳錯誤訊息；null 代表成功。
+  ///
+  /// 已經解鎖了，記憶體裡就有 DEK；這裡再跳一次 Touch ID，是為了不讓「有人碰到
+  /// 你已解鎖的 Nook」就能直接換掉主密碼。Keychain 那份要跟目前的 DEK 一樣才換。
+  /// 資料與 DEK 都不動，Touch ID 之後照樣能用；用了同步的話，新的包裝會傳到其他機器。
+  Future<String?> changeMasterPasswordWithBiometrics(String newPassword) async {
+    if (!canChangePasswordWithBiometrics) return '這台沒有開 Touch ID';
+    if (store.items.isEmpty) {
+      // 沒有任何一筆可以證明 Keychain 那份就是這個保險庫的金鑰。
+      return '保險庫裡還沒有資料，沒辦法確認 Touch ID 存的金鑰，主密碼沒有變更';
+    }
+    touch();
+    try {
+      return await _changeWithBiometrics(newPassword);
+    } on VaultOpenException catch (e) {
+      // 例如 Touch ID 對話框開著的時候自動上鎖了。
+      return '主密碼沒有變更：${e.message}';
+    } catch (e) {
+      return '主密碼沒有變更：$e';
+    }
+  }
+
+  Future<String?> _changeWithBiometrics(String newPassword) async {
+    final read = await biometrics.readDek(
+      reason: '確認是本人，才能更改 Nook 的主密碼',
+    );
+    switch (read.status) {
+      case KeychainDekStatus.denied:
+        return 'Touch ID 沒有通過，主密碼沒有變更';
+      case KeychainDekStatus.notStored:
+        return '這台 Mac 的鑰匙圈裡沒有 Nook 的金鑰，主密碼沒有變更';
+      case KeychainDekStatus.keychainError:
+        return 'macOS 沒讓 Nook 讀鑰匙圈，主密碼沒有變更（${read.message}）';
+      case KeychainDekStatus.ok:
+        break;
+    }
+    final current = await store.exportDek();
+    if (!listEquals(read.dek, current)) {
+      return 'Touch ID 存的金鑰跟目前的保險庫對不上，主密碼沒有變更';
+    }
+    try {
+      await store.resetPassword(newPassword, dek: current);
+    } on FileSystemException catch (e) {
+      return '寫入失敗，主密碼沒有變更：${e.osError?.message ?? e.message}';
+    }
+    biometricArmed = true;
+    _scheduleSync();
+    notifyListeners();
+    return null;
   }
 
   Future<void> copySecret(

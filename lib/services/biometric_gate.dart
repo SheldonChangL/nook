@@ -82,8 +82,19 @@ class BiometricGate {
     if (!await _authenticate('確認是本人，才會把解鎖金鑰交給 Touch ID')) {
       return 'Touch ID 沒有通過，維持關閉';
     }
+    final encoded = base64Encode(dek);
+    // 已經存了同一把就不要再寫：安全儲存外掛更新失敗時會「先刪再新增」，
+    // 新增也失敗的話，原本那份就沒了。讀不出既有的那份（例如換版後 macOS 不讓讀）
+    // 也不覆寫 —— 那份可能是忘了主密碼的人唯一的鑰匙。
+    final String? existing;
     try {
-      await _storage.write(key: _dekKey, value: base64Encode(dek));
+      existing = await _storage.read(key: _dekKey);
+    } catch (e) {
+      return '讀不到鑰匙圈裡既有的 Touch ID 金鑰，為了不覆寫它，維持原狀（${_describe(e)}）';
+    }
+    if (existing == encoded) return null;
+    try {
+      await _storage.write(key: _dekKey, value: encoded);
     } catch (e) {
       // Keychain 寫不進去不能悄悄吞掉：開關會停在關閉，使用者卻不知道為什麼。
       return '寫入 Keychain 失敗，維持關閉（${_describe(e)}）';

@@ -133,12 +133,15 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      value: state.biometricArmed,
+                      value: state.biometricSwitchOn,
                       onChanged: state.biometricAvailable
                           ? (v) async {
+                              if (!v && !await _confirmDisableTouchId()) {
+                                return;
+                              }
                               final error =
                                   await state.setBiometricEnabled(v);
-                              setState(() => _message = error);
+                              if (mounted) setState(() => _message = error);
                             }
                           : null,
                       title: const Text('用 Touch ID 解鎖',
@@ -379,20 +382,64 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     );
   }
 
-  Future<void> _changePassword(BuildContext context) async {
-    final result = await showDialog<String>(
+  /// 關掉 Touch ID 會刪掉 Keychain 那份金鑰。忘了主密碼、靠 Touch ID 進來的人，
+  /// 那份是唯一的鑰匙，關掉之前一定要問。
+  Future<bool> _confirmDisableTouchId() async {
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => const _ChangePasswordDialog(),
+      builder: (context) => AlertDialog(
+        title: const Text('關掉 Touch ID？', style: TextStyle(fontSize: 16)),
+        content: const SizedBox(
+          width: 320,
+          child: Text(
+            '關掉會刪掉存在鑰匙圈裡的那份金鑰，之後只能用主密碼打開 Nook。\n\n'
+            '如果你不記得主密碼，先到「更改主密碼」用 Touch ID 換一組新的，再關。',
+            key: ValueKey('disable-touch-id-warning'),
+            style: TextStyle(fontSize: 13, height: 1.6),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消')),
+          FilledButton(
+              key: const ValueKey('disable-touch-id-confirm'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('仍要關掉')),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _changePassword(BuildContext context) async {
+    final result = await showDialog<_PasswordChange>(
+      context: context,
+      builder: (context) => _ChangePasswordDialog(
+        allowTouchId: state.canChangePasswordWithBiometrics,
+      ),
     );
     if (result == null) return;
-    final parts = result.split('\u0000');
-    final error = await state.changeMasterPassword(parts[0], parts[1]);
-    setState(() => _message = error ?? '主密碼已更換');
+    final error = result.oldPassword == null
+        ? await state.changeMasterPasswordWithBiometrics(result.newPassword)
+        : await state.changeMasterPassword(
+            result.oldPassword!, result.newPassword);
+    if (mounted) setState(() => _message = error ?? '主密碼已更換');
   }
 }
 
+/// 改密碼對話框的結果。[oldPassword] 是 null 代表改用 Touch ID 確認身分。
+class _PasswordChange {
+  const _PasswordChange(this.oldPassword, this.newPassword);
+  final String? oldPassword;
+  final String newPassword;
+}
+
 class _ChangePasswordDialog extends StatefulWidget {
-  const _ChangePasswordDialog();
+  const _ChangePasswordDialog({required this.allowTouchId});
+
+  /// 這台開過 Touch ID：可以不輸入目前的主密碼，改用 Touch ID 確認身分。
+  final bool allowTouchId;
 
   @override
   State<_ChangePasswordDialog> createState() =>
@@ -404,6 +451,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   final _new = TextEditingController();
   final _confirm = TextEditingController();
   String? _error;
+
+  /// 不記得目前的主密碼，改用 Touch ID 確認。
+  bool _useTouchId = false;
 
   @override
   void dispose() {
@@ -422,7 +472,10 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       setState(() => _error = '兩次輸入不一樣');
       return;
     }
-    Navigator.pop(context, '${_old.text}\u0000${_new.text}');
+    Navigator.pop(
+      context,
+      _PasswordChange(_useTouchId ? null : _old.text, _new.text),
+    );
   }
 
   @override
@@ -436,11 +489,36 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PasswordField(
-              controller: _old,
-              autofocus: true,
-              label: '目前的主密碼',
-            ),
+            if (!_useTouchId)
+              PasswordField(
+                controller: _old,
+                autofocus: true,
+                label: '目前的主密碼',
+              ),
+            if (widget.allowTouchId && !_useTouchId)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('change-password-use-touch-id'),
+                  onPressed: () => setState(() {
+                    _useTouchId = true;
+                    _error = null;
+                  }),
+                  child: const Text('不記得目前的主密碼？改用 Touch ID 確認',
+                      style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            if (_useTouchId)
+              Text(
+                '按「更改」之後會跳出 Touch ID（也可以輸入這台 Mac 的登入密碼）確認是本人。'
+                '資料一筆都不會動，Touch ID 之後照樣能用。'
+                '有用跨機同步的話，其他電腦同步之後也會換成新的主密碼，舊的在那些電腦上同樣會失效。',
+                key: const ValueKey('change-password-touch-id-note'),
+                style: TextStyle(
+                    fontSize: 12,
+                    height: 1.6,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
             const SizedBox(height: 12),
             PasswordField(
               controller: _new,

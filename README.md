@@ -42,7 +42,7 @@ Release 版的 entitlements 裡沒有任何網路權限。Windows 與 Linux 沒�
 | 關閉視窗 | 收進狀態列 | 結束程式 | 結束程式 |
 | 快捷鍵修飾鍵 | `⌘` | `Ctrl` | `Ctrl` |
 | 安裝方式 | `scripts/install.sh` | 安裝器 `Nook-<版本>-windows-x64-setup.exe`（另有內測 ZIP） | `.deb` |
-| 下載 | 無（自己在 Mac 上建置） | [Releases](https://github.com/SheldonChangL/nook/releases)（**尚未發佈**，見下方） | [Releases](https://github.com/SheldonChangL/nook/releases)（**尚未發佈**） |
+| 下載 | 無（自己在 Mac 上建置） | [Releases](https://github.com/SheldonChangL/nook/releases)（測試版，見下方） | [Releases](https://github.com/SheldonChangL/nook/releases)（測試版） |
 | 安裝包怎麼建 | `scripts/install.sh` | [`Windows installer` workflow](.github/workflows/windows-installer.yml) 或 `scripts/package_windows.ps1` | [`Linux deb` workflow](.github/workflows/linux-deb.yml) 或 `scripts/build_linux_container.sh` |
 | 程式碼簽章 | 本機 ad-hoc | **無**（SmartScreen 會警告） | 無（`.deb` 未簽） |
 | 作業系統層級的網路隔離 | App Sandbox | 無 | 無 |
@@ -133,8 +133,11 @@ flutter run -d macos
 
 ### 下載安裝檔（Windows／Linux）
 
-**目前還沒有可公開下載的版本。** 正式的下載點會是 [GitHub Releases](https://github.com/SheldonChangL/nook/releases)：
-不必登入，每個版本附 Windows 安裝器、Windows ZIP、Ubuntu `.deb` 與 `SHA256SUMS.txt`。
+從 [GitHub Releases](https://github.com/SheldonChangL/nook/releases) 下載，不必登入。每個版本附 Windows 安裝器、
+Windows ZIP、Ubuntu `.deb` 與 `SHA256SUMS.txt`。目前最新的是 [v1.0.0](https://github.com/SheldonChangL/nook/releases/tag/v1.0.0)，
+標為**測試版（pre-release）**：沒有程式碼簽章，Windows 11 實體桌面與實際的雲端硬碟同步程式都還沒逐一驗收
+（詳見該版的說明）。macOS 沒有提供下載：沒有 Apple 的開發者簽章與公證，從網路下載的 app 會被 Gatekeeper 擋下，
+請照下面的 macOS 一節自行建置。
 
 | 檔案 | 平台 |
 |---|---|

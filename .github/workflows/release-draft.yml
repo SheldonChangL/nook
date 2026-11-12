@@ -147,7 +147,7 @@ jobs:
           |---|---|
           | \`Nook-${FILE}-windows-x64-setup.exe\` | Windows 10／11 x64 安裝器 |
           | \`Nook-${FILE}-windows-x64.zip\` | Windows x64 免安裝版（內測用） |
-          | \`nook_${FILE}_amd64.deb\` | Ubuntu 24.04 x64（套件版本 ${FULL}） |
+          | \`nook_${FILE}_amd64.deb\` | Ubuntu 22.04 以上 x64（套件版本 ${FULL}） |
           | \`SHA256SUMS.txt\` | 以上檔案的 SHA256 |
 
           - **沒有程式碼簽章。** Windows 的 SmartScreen 會警告「未知的發行者」，要按「其他資訊」→「仍要執行」。

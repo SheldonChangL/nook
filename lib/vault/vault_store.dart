@@ -325,20 +325,36 @@ class VaultStore {
   /// 沒有任何項目時無從比對，回 true（空保險庫換哪把都不會壞掉資料）。
   /// 不需要解鎖 —— 給「主密碼在別台換過」的解鎖備案用。
   Future<bool> dekMatchesLocalItems(List<int> dek) async {
-    if (!_itemsDir.existsSync()) return true;
+    final (opened, total) = await _countOpenable(dek);
+    return total == 0 || opened > 0;
+  }
+
+  /// [dek] 有沒有被證明是這個保險庫的：至少打開了一個項目檔。
+  /// 空保險庫證明不了，回 false —— 重設主密碼時不能拿一把沒驗過的金鑰去換掉真的包裝。
+  /// 某幾個檔壞了（被截斷、半同步）不影響判斷：只要有一個打得開就算數。
+  Future<bool> dekProvenByItems(List<int> dek) async {
+    final (opened, _) = await _countOpenable(dek);
+    return opened > 0;
+  }
+
+  Future<(int, int)> _countOpenable(List<int> dek) async {
+    if (!_itemsDir.existsSync()) return (0, 0);
     final files = _itemsDir
         .listSync()
         .whereType<File>()
-        .where((f) => f.path.endsWith('.item'));
+        .where((f) => f.path.endsWith('.item'))
+        .toList();
+    var opened = 0;
     for (final file in files) {
       try {
         await VaultCrypto.open(SecretKey(dek), await file.readAsBytes());
-        return true;
+        opened++;
+        break; // 一個就夠證明了
       } on VaultOpenException {
-        return false;
+        continue;
       }
     }
-    return true;
+    return (opened, files.length);
   }
 
   /// 目前磁碟上的金鑰包裝（KDF 參數、被包住的 DEK、換密碼時間）。
@@ -384,6 +400,30 @@ class VaultStore {
     _keyChangedAt = nextUpdatedAt(_readKeyChangedAt(manifest));
     await _writeManifest(rewrapped);
   }
+
+  /// 忘記主密碼時換上新的：把 [dek] 用新密碼重新包一次，不需要舊密碼，上鎖狀態也能做。
+  ///
+  /// 只有已經用別的方式拿到 DEK 的時候才走得到（目前是 Touch ID 存在 Keychain 的那份），
+  /// 呼叫端要先用 [dekProvenByItems] 確認它真的是這個保險庫的。拿得到 DEK 的人本來就
+  /// 看得到全部資料，所以這不是新的後門，只是讓那條路也能換鎖。項目檔一個都不用動，
+  /// DEK 不變，Touch ID 之後照樣能用。換密碼時間往前推，用了同步的話其他機器會跟著換。
+  ///
+  /// 刻意不先解鎖：解鎖要把每個項目都解開，只要有一個檔壞了就整個失敗 —— 那會讓
+  /// 「主密碼忘了」加上「有一筆壞掉」變成連重設都做不了。
+  Future<void> resetPassword(String newPassword, {required List<int> dek}) =>
+      _serialized(() async {
+    final manifest = await _readManifest();
+    final freshParams = _kdfFactory();
+    final newKek = await VaultCrypto.deriveKek(newPassword, freshParams);
+    final rewrapped = await VaultCrypto.seal(newKek, dek);
+    _kdfParams = freshParams;
+    _keyChangedAt = nextUpdatedAt(_readKeyChangedAt(manifest));
+    // 設定以磁碟上的為準（上鎖時記憶體裡可能是開機時讀的舊值）。
+    _settings = VaultSettings.fromJson(
+      manifest['settings'] as Map<String, dynamic>?,
+    );
+    await _writeManifest(rewrapped);
+  });
 
   Future<void> saveSettings() => _serialized(_saveSettings);
 

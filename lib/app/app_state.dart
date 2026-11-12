@@ -251,6 +251,65 @@ class AppState extends ChangeNotifier {
     unawaited(unlockWithBiometrics());
   }
 
+  /// 忘記主密碼時能不能用 Touch ID 設定新的：這台是 Mac，而且開過 Touch ID。
+  ///
+  /// 看的是 vault.json 公開設定裡的開關，不看開機時探測 Keychain 的結果
+  /// （[biometricArmed]）：換過版本的 app 第一次讀 Keychain，macOS 會先跳出要登入密碼
+  /// 的對話框，開機探測只等 3 秒，可能判成沒有 —— 但真的按下重設時，使用者可以在
+  /// 那個對話框按允許。這是救命的路，不能因為探測逾時就藏起來。
+  bool get canResetWithBiometrics =>
+      phase == VaultPhase.locked &&
+      biometrics.isPlatformSupported &&
+      settings.biometricEnabled;
+
+  /// 忘記主密碼：通過 Touch ID 拿到 Keychain 裡的 DEK，確認它真的打得開這個保險庫，
+  /// 再用它換上 [newPassword]。成功後直接是解鎖狀態。
+  ///
+  /// 失敗時一律不動 Keychain 那份 —— 這時它可能是唯一還能打開資料的東西。
+  Future<bool> resetPasswordWithBiometrics(String newPassword) async {
+    if (!canResetWithBiometrics) return false;
+    return _guard(() async {
+      final read = await biometrics.readDek(
+        reason: '確認是本人，才能為 Nook 設定新的主密碼',
+      );
+      switch (read.status) {
+        case KeychainDekStatus.notStored:
+          throw const VaultOpenException(
+            '這台 Mac 的鑰匙圈裡沒有 Nook 的金鑰，沒辦法用 Touch ID 重設',
+          );
+        case KeychainDekStatus.denied:
+          throw const VaultOpenException('Touch ID 沒有通過，主密碼沒有變更');
+        case KeychainDekStatus.keychainError:
+          throw VaultOpenException(
+            'macOS 沒讓 Nook 讀鑰匙圈，主密碼沒有變更（${read.message}）',
+          );
+        case KeychainDekStatus.ok:
+          break;
+      }
+      final dek = read.dek!;
+      // 先證明這把金鑰真的是這個保險庫的（至少打開一筆），才拿它換掉現在的包裝。
+      if (!await store.dekProvenByItems(dek)) {
+        throw const VaultOpenException(
+          'Touch ID 存的金鑰打不開這個保險庫的任何一筆資料，主密碼沒有變更',
+        );
+      }
+      await store.resetPassword(newPassword, dek: dek);
+      try {
+        await store.unlockWithDek(dek);
+      } on VaultOpenException {
+        // 主密碼已經換好了；解不開的是某個壞掉的項目檔。
+        store.lock();
+        throw const VaultOpenException(
+          '主密碼已換成新的，但有資料檔讀不出來，請用新主密碼再試一次',
+        );
+      }
+      biometricArmed = true;
+      // 解鎖後的第一輪同步會把新的金鑰包裝傳到其他機器（用了同步的話）。
+      _afterUnlock();
+      return true;
+    });
+  }
+
   /// Touch ID 解鎖。沒開、沒通過、或 Keychain 那份跟保險庫對不上，都回 false
   /// 讓畫面退回主密碼。
   Future<bool> unlockWithBiometrics() async {
@@ -261,9 +320,11 @@ class AppState extends ChangeNotifier {
       try {
         await store.unlockWithDek(dek);
       } on VaultOpenException {
-        await biometrics.forget();
+        // 絕不在這裡刪掉 Keychain 那份：解不開不一定是金鑰錯，也可能是某個項目檔
+        // 壞了或格式不認得。忘了主密碼的人，那份可能是唯一打得開資料的東西。
+        // 只有使用者在設定裡親手關掉 Touch ID 才會刪。這次先不再自動跳 Touch ID。
         biometricArmed = false;
-        throw const VaultOpenException('Touch ID 存的金鑰跟保險庫對不上，請用主密碼');
+        throw const VaultOpenException('Touch ID 沒能打開保險庫，請用主密碼');
       }
       _afterUnlock();
       return true;
